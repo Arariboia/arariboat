@@ -102,7 +102,8 @@ void WifiConnectionTask(void* parameter) {
                 }
             }          
         }
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        Serial.printf("\nIP address: %s\n", WiFi.localIP().toString().c_str());
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
@@ -320,7 +321,6 @@ void CompanionReaderTask(void* parameter) {
                     }
                 }
             }
-        Serial.println();
         }
 
         static uint32_t update_time = 0;
