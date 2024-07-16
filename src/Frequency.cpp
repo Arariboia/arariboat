@@ -1,9 +1,6 @@
 #include <Arduino.h>
 #include "Utilities.hpp"
 
-static constexpr int pinRPMLeft = PIN_RPM_LEFT;
-static constexpr int pinRPMRight = PIN_RPM_RIGHT;
-
 static volatile unsigned long lastMeasureLeft = 0;
 static volatile unsigned long periodSumLeft = 0;
 static volatile unsigned int counterLeft = 0;
@@ -11,7 +8,6 @@ static volatile unsigned int counterLeft = 0;
 static volatile unsigned long lastMeasureRight = 0;
 static volatile unsigned long periodSumRight = 0;
 static volatile unsigned int counterRight = 0;
-
 
 static bool shouldBlock = false;
 
@@ -88,6 +84,9 @@ static void HandleReadings() {
 }
 
 void FrequencyCounterTask(void* parameter) {
+
+    constexpr int pinRPMLeft = PIN_RPM_LEFT;
+    constexpr int pinRPMRight = PIN_RPM_RIGHT;
     
     pinMode(pinRPMLeft, INPUT);
     pinMode(pinRPMRight, INPUT);

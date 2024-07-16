@@ -41,11 +41,11 @@ of the wires with a multimeter.
 
 typedef Adafruit_ADS1115 ADS1115; // Alias for the ADS1115 class.
 
-static void serialCommandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
+static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
     
     const char* command = (const char*)event_data;
 
-    if (strncmp(command, "adc", 3) == 0) {
+    if (STRINGS_ARE_EQUAL(command, "adc")) {
 
         ADS1115* adc = (ADS1115*)handler_args;
 
@@ -89,12 +89,12 @@ void InstrumentationTask(void* parameter) {
                 is_adc_initialized = true;
                 break;
             }
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(400));
         }
     }
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &adc);
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &adc);
     
     while (true) {
         // In the ADS1115 single ended measurements have 15 bits of resolution. Only differential measurements have 16 bits of resolution.

@@ -3,11 +3,11 @@
 #include "arariboat/mavlink.h" // Custom mavlink dialect for the boat generated using Mavgen tool.
 #include "Utilities.hpp" // Custom utility macros and functions.
 
-static void serialCommandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
+static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
     
     const char* command = (const char*)event_data;
 
-    if (strncmp(command, "gps", 3) == 0) {
+    if (STRINGS_ARE_EQUAL(command, "gps")) {
         Serial.printf("\n[GPS]Reading GPS data\n");
         TinyGPSPlus* gps = (TinyGPSPlus*)handler_args;
         constexpr float invalid_value = -1.0f; // Begin the fields with arbitrated invalid value and update them if the gps data is valid.
@@ -54,13 +54,13 @@ void GPSTask(void* parameter) {
     // The fifth decimal place is worth up to 1.1 m. The sixth decimal place is worth up to 11cm. And so forth.
     
     TinyGPSPlus gps; // Object that parses NMEA sentences from the NEO-6M GPS module
-    constexpr uint8_t pinGPSRX = PIN_GPS_RX;  
-    constexpr uint8_t pinGPSTX = PIN_GPS_TX; 
+    constexpr uint8_t pin_gps_rx = PIN_GPS_RX;  
+    constexpr uint8_t pin_gps_tx = PIN_GPS_TX; 
     constexpr int32_t baud_rate = 9600; // Fixed baud rate used by NEO-6M GPS module
-    Serial2.begin(baud_rate, SERIAL_8N1, pinGPSRX, pinGPSTX);
+    Serial2.begin(baud_rate, SERIAL_8N1, pin_gps_rx, pin_gps_tx);
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &gps); 
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &gps); 
 
     while (true) {
         while (Serial2.available()) {

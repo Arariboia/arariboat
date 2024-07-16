@@ -1,19 +1,21 @@
 #include <Arduino.h>
 #include "Utilities.hpp"
 
-static void serialCommandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
-    
-    const char* command = (const char*)event_data;
+#define STRINGS_ARE_EQUAL(a, b) strcmp(a, b) == 0
 
-    if (strncmp(command, "blinkfast", 9) == 0) {
+static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
+    
+    const char* command = (const char*)event_data; 
+
+    if (STRINGS_ARE_EQUAL(command, "blinkfast")) {
         xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Fast, eSetValueWithOverwrite);
-    } else if (strncmp(command, "blinkmedium", 11) == 0) {
+    } else if (STRINGS_ARE_EQUAL(command, "blinkmedium")) {
         xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Medium, eSetValueWithOverwrite);
-    } else if (strncmp(command, "blinkslow", 9) == 0) {
+    } else if (STRINGS_ARE_EQUAL(command, "blinkslow")) {
         xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Slow, eSetValueWithOverwrite);
-    } else if (strncmp(command, "pulse", 5) == 0) {
+    } else if (STRINGS_ARE_EQUAL(command, "blink")) {
         xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Pulse, eSetValueWithOverwrite);
-    }
+    }   
 }
 
 static void FastBlinkPulse(int pin) {
@@ -57,8 +59,6 @@ static void BuzzerWrite(int blink_rate) {
     pattern_position++;
 }
 
-
-
 // Tasks can send notifications here to change the blink rate of the LED in order to communicate the status of the boat.
 void LedBlinkerTask(void* parameter) {
 
@@ -68,7 +68,7 @@ void LedBlinkerTask(void* parameter) {
     uint32_t previous_blink_rate = blink_rate;
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, nullptr);
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, nullptr);
 
     while (true) {
 

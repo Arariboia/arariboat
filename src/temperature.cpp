@@ -43,11 +43,11 @@ void ScanProbeAddresses(DallasTemperature &probes) {
     #endif
 }
 
-static void serialCommandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
+static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
     
     const char* command = (const char*)event_data;
 
-    if (strncmp(command, "scan", 4) == 0) {
+    if (STRINGS_ARE_EQUAL(command, "temperature")) {
         Serial.printf("\n[Temperature]: Scanning for new probes\n");
         ScanProbeAddresses(*((DallasTemperature*)handler_args));
     }
@@ -68,9 +68,9 @@ static void PrintDebugTemperature(float battery_left, float battery_right, float
 
 void TemperatureTask(void* parameter) {
 
-    constexpr uint8_t pinTemperature = PIN_TEMPERATURE; // GPIO used for OneWire communication
+    constexpr uint8_t pin_temperature = PIN_TEMPERATURE; // GPIO used for OneWire communication
     
-    OneWire one_wire_device(pinTemperature); // Setup a one_wire_device instance to communicate with any devices that use the OneWire protocol
+    OneWire one_wire_device(pin_temperature); // Setup a one_wire_device instance to communicate with any devices that use the OneWire protocol
     DallasTemperature probes(&one_wire_device); // Pass our one_wire_device reference to Dallas Temperature sensor, which uses the OneWire protocol.
     
     //Each probe has a unique 8-byte address. Use the scanIndex method to initially find the addresses of the probes. 
@@ -81,7 +81,7 @@ void TemperatureTask(void* parameter) {
     DeviceAddress thermal_probe_two = {0x28, 0xFF, 0xA5, 0x12, 0xA0, 0x16, 0x03, 0xC4};
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &probes);
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &probes);
 
     while (true) {
         ScanProbeAddresses(probes); 

@@ -6,7 +6,7 @@
 void ProcessMavlinkMessage(mavlink_message_t message) {
   
     PrintMavlinkMessageInfo(message);
-    BlinkNotify("pulse");
+    BlinkNotify("blink");
 }
 
 bool TryParseMavlinkMessage(uint8_t input, mavlink_channel_t channel) {

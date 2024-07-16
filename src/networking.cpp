@@ -7,11 +7,11 @@
 #include "Utilities.hpp" // Custom utility macros and functions.
 #include "InfluxDB.hpp" // Custom InfluxDB client for sending data to InfluxDB.
 
-static void serialCommandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
+static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
     
     const char* command = (const char*)event_data;
 
-    if (strncmp(command, "wifi", 4) == 0) {
+    if (STRINGS_ARE_EQUAL(command, "wifi")) {
         Serial.printf("\n[WIFI]Reading WiFi data\n");
         Serial.printf("\n[WIFI]Connected to %s with IP address %s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
     }
@@ -36,7 +36,7 @@ void WifiTask(void* parameter) {
     });
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, nullptr); 
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, nullptr); 
     
     while (true) {
 

@@ -21,6 +21,9 @@
 #define STRINGIFY(x) __STRINGIFY__(x)
 #define __STRINGIFY__(x) #x
 
+//Macro to compare two strings
+#define STRINGS_ARE_EQUAL(a, b) strcmp(a, b) == 0
+
 
 //Macro to synchronize the creation of tasks with their names and their handles
 //Trivial macros to improve argument readability
