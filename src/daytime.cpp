@@ -17,9 +17,9 @@ static void serialCommandCallback(void* handler_args, esp_event_base_t base, int
 }
 
 
-void TimeReaderTask(void *parameter) {
+void TimestampTask(void *parameter) {
 
-    auto logger = Logger("TimeReaderTask started");
+    auto logger = Logger("TimestampTask started");
 
     while (WiFi.status() != WL_CONNECTED) {
         logger.log("[TIME]Waiting for WiFi connection...", 3000);
@@ -45,7 +45,7 @@ void TimeReaderTask(void *parameter) {
 	RTC.setTimeStruct(timeinfo); 
     //xEventGroupSetBits(systemEventGroup, TIMESTAMP_ACQUIRED_BIT); // Data acquisition can only start after the timestamp is acquired.
 
-    esp_event_handler_register_with(eventLoop, SERIAL_PARSER_EVENT_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &RTC);
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &RTC);
 
 	/*------------------------------------*/
 

@@ -38,20 +38,29 @@ static void serialCommandCallback(void* handler_args, esp_event_base_t base, int
     }
 }
 
-void GPSReaderTask(void* parameter) {
+#define SECONDS(x) (x*1000)
+static void PrintPosition(float latitude, float longitude, int interval) {
+    static unsigned long lastPrint = 0;
+    if (millis() - lastPrint < interval) return;
+    lastPrint = millis();
+
+    DEBUG_PRINTF("\n[GPS]Latitude: %f, Longitude: %f\n", latitude, longitude);
+}
+
+void GPSTask(void* parameter) {
 
     // Example of latitude: 40.741895 (north is positive)
     // Example of longitude: -73.989308 (west is negative)
     // The fifth decimal place is worth up to 1.1 m. The sixth decimal place is worth up to 11cm. And so forth.
     
     TinyGPSPlus gps; // Object that parses NMEA sentences from the NEO-6M GPS module
-    constexpr uint8_t gps_rx_pin = GPIO_NUM_16;  
-    constexpr uint8_t gps_tx_pin = GPIO_NUM_17; 
+    constexpr uint8_t pinGPSRX = PIN_GPS_RX;  
+    constexpr uint8_t pinGPSTX = PIN_GPS_TX; 
     constexpr int32_t baud_rate = 9600; // Fixed baud rate used by NEO-6M GPS module
-    Serial2.begin(baud_rate, SERIAL_8N1, gps_rx_pin, gps_tx_pin);
+    Serial2.begin(baud_rate, SERIAL_8N1, pinGPSRX, pinGPSTX);
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, SERIAL_PARSER_EVENT_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &gps); 
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &gps); 
 
     while (true) {
         while (Serial2.available()) {
@@ -64,7 +73,7 @@ void GPSReaderTask(void* parameter) {
                 if (gps.location.isValid()) {
                     latitude = gps.location.lat();
                     longitude = gps.location.lng();
-                    DEBUG_PRINTF("[GPS]Latitude: %f, Longitude: %f\n", latitude, longitude);
+                    PrintPosition(latitude, longitude, SECONDS(10));
                 }
                 
                 SystemData::getInstance().all_info.latitude = latitude;

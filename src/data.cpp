@@ -18,7 +18,7 @@ SystemData::SystemData() {
     };
 }
 
-void SystemData::WriteToSerial() {
+void SystemData::WriteMavlinkData() {
     mavlink_all_info_t info = all_info;
     mavlink_message_t message;
     mavlink_msg_all_info_encode(1, 200, &message, &info);

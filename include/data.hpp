@@ -9,7 +9,7 @@ public:
 
     mavlink_all_info_t all_info;
 
-    void WriteToSerial();
+    void WriteMavlinkData();
 
     String GetLineProtocol();
     

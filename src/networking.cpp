@@ -36,7 +36,7 @@ void WifiTask(void* parameter) {
     });
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, SERIAL_PARSER_EVENT_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, nullptr); 
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, nullptr); 
     
     while (true) {
 
@@ -46,8 +46,8 @@ void WifiTask(void* parameter) {
         }
 
         WiFi.mode(WIFI_STA);
-        if (ledBlinkerHandle != nullptr) {
-            xTaskNotify(ledBlinkerHandle, BlinkRate::Fast, eSetValueWithOverwrite);
+        if (LedBlinkerTaskHandle != nullptr) {
+            xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Fast, eSetValueWithOverwrite);
         }
 
         for (auto& wifi : wifiCredentials) {
@@ -59,8 +59,8 @@ void WifiTask(void* parameter) {
                 if (attempts++ > 5) break;
             }
             if (WiFi.status() == WL_CONNECTED) {
-                if (ledBlinkerHandle != nullptr) {
-                    xTaskNotify(ledBlinkerHandle, BlinkRate::Slow, eSetValueWithOverwrite);
+                if (LedBlinkerTaskHandle != nullptr) {
+                    xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Slow, eSetValueWithOverwrite);
                 }
                 break;
             }
@@ -144,7 +144,7 @@ void ServerTask(void* parameter) {
 
     while (true) {
         String line_protocol = SystemData::getInstance().GetLineProtocol();
-        //DEBUG_PRINTF("\n[HTTP]]Sending Data: \n%s", line_protocol.c_str());
+        DEBUG_PRINTF("\n[HTTP]]Sending Data: \n%s", line_protocol.c_str());
         postToInfluxDB(line_protocol);
         vTaskDelay(2000);
     }

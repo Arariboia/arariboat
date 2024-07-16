@@ -1,7 +1,9 @@
+#pragma once
 #include "data.hpp" // Singleton class for storing system-data that needs to be accessed by multiple tasks.
 #include "event_loop.hpp" //Event loop to handle events between tasks. This allows tasks to communicate with each other with loosely coupled code.
 #include "logger.hpp" // Logger class for logging messages at a specified interval.
 #include "blinker.hpp" // Blinker class for controlling the onboard LED.
+#include "led.hpp" // LED class for controlling the onboard LED.
 
 //*********************************************************/
 #define DEBUG // Uncomment to enable debug messages globally/
@@ -19,29 +21,38 @@
 #define STRINGIFY(x) __STRINGIFY__(x)
 #define __STRINGIFY__(x) #x
 
+
+//Macro to synchronize the creation of tasks with their names and their handles
+//Trivial macros to improve argument readability
+
+#define CREATE_TASK(task_name, stack_size, priority) xTaskCreate(task_name, #task_name, stack_size, NULL, priority, &task_name##Handle)
+#define STACK_SIZE(x) (x) 
+#define PRIORITY(x) (x)
+
+
 extern void LedBlinkerTask(void* parameter);
 extern void WifiTask(void* parameter);
 extern void ServerTask(void* parameter);
-extern void SerialReaderTask(void* parameter);
-extern void TemperatureReaderTask(void* parameter);
-extern void GPSReaderTask(void* parameter);
-extern void InstrumentationReaderTask(void* parameter);
-extern void TimeReaderTask(void* parameter);
+extern void SerialTask(void* parameter);
+extern void TemperatureTask(void* parameter);
+extern void GPSTask(void* parameter);
+extern void InstrumentationTask(void* parameter);
+extern void TimestampTask(void* parameter);
 extern void FrequencyCounterTask(void* parameter);
 
 // Declare a handle for each task to allow manipulation of the task from other tasks, such as sending notifications, resuming or suspending.
 // The handle is initialized to nullptr to avoid the task being created before the setup() function.
 // Each handle is then assigned to the task created in the setup() function.
 
-extern TaskHandle_t ledBlinkerHandle;
-extern TaskHandle_t wifiTaskHandle;
-extern TaskHandle_t serverTaskHandle;
-extern TaskHandle_t serialReaderTaskHandle;
-extern TaskHandle_t temperatureReaderTaskHandle;
-extern TaskHandle_t gpsReaderTaskHandle;
-extern TaskHandle_t instrumentationReaderTaskHandle;
-extern TaskHandle_t timeReaderTaskHandle;
-extern TaskHandle_t frequencyCounterTaskHandle;
+extern TaskHandle_t LedBlinkerTaskHandle;
+extern TaskHandle_t WifiTaskHandle;
+extern TaskHandle_t ServerTaskHandle;
+extern TaskHandle_t SerialTaskHandle;
+extern TaskHandle_t TemperatureTaskHandle;
+extern TaskHandle_t GPSTaskHandle;
+extern TaskHandle_t InstrumentationTaskHandle;
+extern TaskHandle_t TimestampTaskHandle;
+extern TaskHandle_t FrequencyCounterTaskHandle;
 
 /// @brief Calibrates a reading by using a linear equation obtained by comparing the readings with a multimeter.
 /// @return Calibrated reading

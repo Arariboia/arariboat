@@ -3,42 +3,44 @@
 
 //TODO: Improve server interface for configuration and debug purposes.
 //TODO: Implement auxiliary battery and pumps readings using some I2C system
-//TODO: Send data directly to InfluxDB instead of using Husarnet
-//TODO: Save all measurements to a file in the SPIFFS file system or some microSD card, then flush it to InfluxDB when the connection is available
-//TODO: Implement RPM measurements code
 //TODO: Assign better weights to task priorities via benchmarks
 
+//Commands that can be received from serial port or sent from other tasks
+ESP_EVENT_DEFINE_BASE(COMMAND_BASE);
 
-// Declare a handle for each task to allow manipulation of the task from other tasks, such as sending notifications, resuming or suspending.
-// The handle is initialized to nullptr to avoid the task being created before the setup() function.
-// Each handle is then assigned to the task created in the setup() function.
+/*
+Declare task handles for each task to allow its manipulation from other 
+tasks, such as sending notifications, resuming or suspending.
+Their names must be the same as the task function name followed by "Handle".
+*/
 
-TaskHandle_t ledBlinkerHandle = nullptr;
-TaskHandle_t wifiTaskHandle = nullptr;
-TaskHandle_t serverTaskHandle = nullptr;
-TaskHandle_t serialReaderTaskHandle = nullptr;
-TaskHandle_t temperatureReaderTaskHandle = nullptr;
-TaskHandle_t gpsReaderTaskHandle = nullptr;
-TaskHandle_t instrumentationReaderTaskHandle = nullptr;
-TaskHandle_t timeReaderTaskHandle = nullptr;
-TaskHandle_t frequencyCounterTaskHandle = nullptr;
+TaskHandle_t LedBlinkerTaskHandle = nullptr;
+TaskHandle_t WifiTaskHandle = nullptr;
+TaskHandle_t ServerTaskHandle = nullptr;
+TaskHandle_t SerialTaskHandle = nullptr;
+TaskHandle_t TemperatureTaskHandle = nullptr;
+TaskHandle_t GPSTaskHandle = nullptr;
+TaskHandle_t InstrumentationTaskHandle = nullptr;
+TaskHandle_t TimestampTaskHandle = nullptr;
+TaskHandle_t FrequencyCounterTaskHandle = nullptr;
 
 void setup() {
 
+    Serial.begin(BAUD_RATE);
     InitializeEventLoop(&eventLoop); // Initialize the event loop to handle events between tasks.
-    xTaskCreate(LedBlinkerTask, "ledBlinker", 2048, NULL, 1, &ledBlinkerHandle);
-    xTaskCreate(WifiTask, "wifiConnection", 4096, NULL, 2, &wifiTaskHandle);
-    xTaskCreate(ServerTask, "server", 8096, NULL, 3, &serverTaskHandle);
-    xTaskCreate(TimeReaderTask, "timeReader", 4096, NULL, 2, &timeReaderTaskHandle);
-    xTaskCreate(SerialReaderTask, "serialReader", 4096, NULL, 1, &serialReaderTaskHandle);
-    xTaskCreate(TemperatureReaderTask, "temperatureReader", 4096, NULL, 1, &temperatureReaderTaskHandle);
-    xTaskCreate(GPSReaderTask, "gpsReader", 4096, NULL, 1, &gpsReaderTaskHandle);
-    xTaskCreate(InstrumentationReaderTask, "instrumentationReader", 4096, NULL, 3, &instrumentationReaderTaskHandle);
-    xTaskCreate(FrequencyCounterTask, "frequencyCounter", 4096, NULL, 1, &frequencyCounterTaskHandle);
+    CREATE_TASK(LedBlinkerTask, STACK_SIZE(2048), PRIORITY(1));
+    CREATE_TASK(SerialTask, STACK_SIZE(4096), PRIORITY(1));
+    CREATE_TASK(WifiTask, STACK_SIZE(4096), PRIORITY(2));
+    CREATE_TASK(ServerTask, STACK_SIZE(8096), PRIORITY(3));
+    CREATE_TASK(TimestampTask, STACK_SIZE(4096), PRIORITY(2));
+    CREATE_TASK(TemperatureTask, STACK_SIZE(4096), PRIORITY(1));
+    CREATE_TASK(GPSTask, STACK_SIZE(4096), PRIORITY(1));
+    CREATE_TASK(InstrumentationTask, STACK_SIZE(4096), PRIORITY(3));
+    CREATE_TASK(FrequencyCounterTask, STACK_SIZE(4096), PRIORITY(1));
 }
 
 void loop() {
-    SystemData::getInstance().WriteToSerial();
+    SystemData::getInstance().WriteMavlinkData();
     vTaskDelay(1000);
 }
 

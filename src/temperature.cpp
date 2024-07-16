@@ -8,7 +8,7 @@
 
 /// @brief Auxiliary function to print the 8-byte address of a Dallas Thermal Probe to the serial port
 /// @param device_address 
-void PrintProbeAddress(DeviceAddress device_address) {
+static void PrintProbeAddress(DeviceAddress device_address) {
 
     uint8_t device_address_length = 8; // The length of the device address is 8 bytes
     for (uint8_t i = 0; i < device_address_length; i++) { // Loop through each byte in the eight-byte address
@@ -53,17 +53,24 @@ static void serialCommandCallback(void* handler_args, esp_event_base_t base, int
     }
 }
 
-void PrintDebugTemperature(float battery_left, float battery_right, float mppt) {
+static void PrintDebugTemperature(float battery_left, float battery_right, float mppt) {
+    
+    static unsigned long last_print_time = 0;
+    if (millis() - last_print_time < 20000) {
+        return;
+    }
+    last_print_time = millis();
+
     DEBUG_PRINTF("\n[Temperature]Battery Left: %f\n", battery_left);
     DEBUG_PRINTF("\n[Temperature]Battery Right: %f\n", battery_right);
     DEBUG_PRINTF("\n[Temperature]MPPT: %f\n", mppt);
 }
 
-void TemperatureReaderTask(void* parameter) {
+void TemperatureTask(void* parameter) {
 
-    constexpr uint8_t pin_temperature_bus = GPIO_NUM_15; // GPIO used for OneWire communication
+    constexpr uint8_t pinTemperature = PIN_TEMPERATURE; // GPIO used for OneWire communication
     
-    OneWire one_wire_device(pin_temperature_bus); // Setup a one_wire_device instance to communicate with any devices that use the OneWire protocol
+    OneWire one_wire_device(pinTemperature); // Setup a one_wire_device instance to communicate with any devices that use the OneWire protocol
     DallasTemperature probes(&one_wire_device); // Pass our one_wire_device reference to Dallas Temperature sensor, which uses the OneWire protocol.
     
     //Each probe has a unique 8-byte address. Use the scanIndex method to initially find the addresses of the probes. 
@@ -74,7 +81,7 @@ void TemperatureReaderTask(void* parameter) {
     DeviceAddress thermal_probe_two = {0x28, 0xFF, 0xA5, 0x12, 0xA0, 0x16, 0x03, 0xC4};
 
     //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, SERIAL_PARSER_EVENT_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &probes);
+    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, serialCommandCallback, &probes);
 
     while (true) {
         ScanProbeAddresses(probes); 
@@ -96,7 +103,7 @@ void TemperatureReaderTask(void* parameter) {
             temperature_mppt = LinearCorrection(temperature_mppt, 1.0f, 0.0f);
         }
 
-        //PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt);
+        PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt);
 
         SystemData::getInstance().all_info.temperature_battery_left = temperature_battery_left;
         SystemData::getInstance().all_info.temperature_battery_right = temperature_battery_right;
