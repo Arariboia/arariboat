@@ -73,8 +73,8 @@ static void HandleReadings() {
     float frequencyLeft = PeriodToFrequency(periodLeft);
     float frequencyRight = PeriodToFrequency(periodRight);
 
-    float rpmLeftMotor = FrequencyToRPM(frequencyLeft);
-    float rpmRightMotor = FrequencyToRPM(frequencyRight);
+    float rpmLeftMotor = LinearCorrection(FrequencyToRPM(frequencyLeft), 0.878, 58.874);
+    float rpmRightMotor = LinearCorrection(FrequencyToRPM(frequencyRight), 0.944, -1.606);
 
     UpdateSystemData(rpmLeftMotor, rpmRightMotor);
 

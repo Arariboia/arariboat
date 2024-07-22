@@ -20,9 +20,7 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
 void WifiTask(void* parameter) {
     
     std::unordered_map<const char*, const char*> wifiCredentials;
-    wifiCredentials["EMobil 1"] = "faraboia";
-    wifiCredentials["Innorouter"] = "innomaker";
-    wifiCredentials["NITEE"] = "nitee123";
+    wifiCredentials["Ararirouter"] = "arariboia";
 
     // Register a callback function to handle WiFi events. This function is called when the WiFi status changes.
     WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {

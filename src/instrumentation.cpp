@@ -111,6 +111,8 @@ void InstrumentationTask(void* parameter) {
         adc.setGain(GAIN_EIGHT);
         float current_starboard = LinearCorrection(adc.readADC_SingleEnded(2), 0.005627f, -56.204637f);
 
+        current_starboard = current_starboard - current_port;
+
         adc.setGain(GAIN_EIGHT);
         float current_mppt = LinearCorrection(adc.readADC_SingleEnded(3), 0.001602f, 0.015848f);
 
