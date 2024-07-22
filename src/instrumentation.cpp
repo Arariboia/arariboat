@@ -71,12 +71,45 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
     }
 }
 
+bool TryInitializeIrradiance(ADS1115& adc, int address) {
+    static bool initialized = false;
+    static bool firstPrint = false;
+    if (!initialized) {
+        initialized = adc.begin(address);
+    }
+
+    if (!initialized) return false;
+    
+    if (!firstPrint) {
+        DEBUG_PRINTF("\n[ADS]IRRADIANCE successfully initialized at address 0x%x\n", address);
+        firstPrint = true;
+    }
+
+    return true;
+}
+
+float CalculateIrradiance(ADS1115& adc) {
+    int digital_output = adc.readADC_SingleEnded(0);
+    float voltage = adc.computeVolts(digital_output);
+    
+    constexpr float voltage_to_irradiance = 1000.0f / 0.224f;
+    float irradiance = voltage * voltage_to_irradiance;
+   
+    static unsigned long lastTime = 0;
+    if (millis() - lastTime > 5000) {
+        lastTime = millis();
+        DEBUG_PRINTF("\n[INSTRUMENTATION]ADC: %d\tVoltage: %fV\tIrradiance: %.0fW/m2\n", digital_output, voltage, irradiance);
+    }
+
+    return irradiance;
+}
+
 void InstrumentationTask(void* parameter) {
     
     Wire.begin(); // I2C master mode to communicate with the ADS1115 ADC
 
-    ADS1115 adc; 
-    constexpr uint8_t adc_addresses[] = {0x48, 0x49, 0x50, 0x51}; // Address is determined by a solder bridge or jumper on the instrumentation board.
+    ADS1115 adc;
+    constexpr uint8_t adc_addresses[] = {0x48}; // Address is determined by a solder bridge or jumper on the instrumentation board.
     adc.setGain(GAIN_FOUR); // Should be set such that the maximum voltage of the input signal is close to the selected full-scale input voltage.
     adc.setDataRate(RATE_ADS1115_16SPS); // Setting a low data rate to increase the oversampling ratio of the ADC and thus reduce the noise.
     
@@ -93,6 +126,11 @@ void InstrumentationTask(void* parameter) {
         }
     }
 
+    ADS1115 irradianceADC;
+    irradianceADC.setGain(GAIN_SIXTEEN);
+    irradianceADC.setDataRate(RATE_ADS1115_16SPS);
+
+
     //Register serial callback commands
     esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &adc);
     
@@ -101,7 +139,10 @@ void InstrumentationTask(void* parameter) {
         // As we are using the 4 analog inputs for each of the 4 sensors, single ended measurements are being used in order to access all 4 sensors.
         // When using single ended mode, the maximum output code is 0x7FFF(32767), which corresponds to the full-scale input voltage.
         
-        
+        if (TryInitializeIrradiance(irradianceADC, 0x49)) {
+            CalculateIrradiance(irradianceADC);
+        }
+
         adc.setGain(GAIN_FOUR);
         float voltage_battery = LinearCorrection(adc.readADC_SingleEnded(0), 0.002472f, 0.801442);
 
