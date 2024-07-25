@@ -24,22 +24,30 @@ static void PrintProbeAddress(DeviceAddress device_address) {
 /// @param probes 
 void ScanProbeAddresses(DallasTemperature &probes) {
     probes.begin(); // Scan for devices on the OneWire bus.
+
+    char message[256];
+    memset(message, 0, sizeof(message));
     
     #ifdef DEBUG
     if (probes.getDeviceCount() == 0) {
         return;
     }
 
-    DEBUG_PRINTF("\nFound %d probes\n", probes.getDeviceCount());
+    snprintf(message, sizeof(message), "\n[TEMPERATURE]Found %d probes\n", probes.getDeviceCount());
     for (uint8_t i = 0; i < probes.getDeviceCount(); i++) {
         DeviceAddress device_address;
         if (!probes.getAddress(device_address, i)) {
-            DEBUG_PRINTF("Unable to find address for Device %d\n", i);
+            snprintf(message + strlen(message), sizeof(message) - strlen(message), "[TEMPERATURE]Unable to find address for Device %d\n", i);
         } else {
-            DEBUG_PRINTF("Device %d Address: ", i);
-            PrintProbeAddress(device_address);
+            snprintf(message + strlen(message), sizeof(message) - strlen(message), "[TEMPERATURE]Device %d Address: ", i);
+            for (uint8_t j = 0; j < 8; j++) {
+                snprintf(message + strlen(message), sizeof(message) - strlen(message), "%02x", device_address[j]);
+            }
+            snprintf(message + strlen(message), sizeof(message) - strlen(message), "\n");
         }
     }
+
+    DEBUG_PRINTF("%s", message);
     #endif
 }
 

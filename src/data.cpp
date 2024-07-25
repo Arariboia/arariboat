@@ -16,6 +16,8 @@ SystemData::SystemData() {
         .rpm_right = 0.0f,
         .timestamp = 0
     };
+
+    irradiance = 0.0f;
 }
 
 void SystemData::WriteMavlinkData() {
@@ -29,6 +31,7 @@ void SystemData::WriteMavlinkData() {
 
 String SystemData::GetLineProtocol() {
     mavlink_all_info_t info = all_info;
+    float irradiance = SystemData::getInstance().irradiance;
     char buffer[512];
     memset(buffer, 0, sizeof(buffer));
    
@@ -42,7 +45,8 @@ String SystemData::GetLineProtocol() {
                     "latitude=%f,"
                     "longitude=%f,"
                     "rpm_left=%.2f,"
-                    "rpm_right=%.2f",
+                    "rpm_right=%.2f,"
+                    "irradiance=%.2f",
                     info.battery_voltage,
                     info.motor_current_left,
                     info.motor_current_right,
@@ -53,7 +57,8 @@ String SystemData::GetLineProtocol() {
                     info.latitude,
                     info.longitude,
                     info.rpm_left,
-                    info.rpm_right);
+                    info.rpm_right,
+                    irradiance);
                     
     if (info.timestamp != 0) {
         sprintf(buffer + strlen(buffer), " %lu", info.timestamp);

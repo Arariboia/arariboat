@@ -111,6 +111,7 @@ void ServerTask(void* parameter) {
         float longitude = SystemData::getInstance().all_info.longitude;
         float rpm_left = SystemData::getInstance().all_info.rpm_left;
         float rpm_right = SystemData::getInstance().all_info.rpm_right;
+        float irradiance = SystemData::getInstance().irradiance;
         uint64_t timestamp = SystemData::getInstance().all_info.timestamp;
 
         String response = "<h1>Boat32</h1>";
@@ -125,6 +126,7 @@ void ServerTask(void* parameter) {
         response += "<p>Longitude: " + String(longitude) + "</p>";
         response += "<p>RPM Left: " + String(rpm_left) + "</p>";
         response += "<p>RPM Right: " + String(rpm_right) + "</p>";
+        response += "<p>Irradiance: " + String(irradiance) + "</p>"; 
         response += "<p>Timestamp: " + String(timestamp) + "</p>";
 
         request->send(200, "text/html", response);
@@ -142,7 +144,7 @@ void ServerTask(void* parameter) {
 
     while (true) {
         String line_protocol = SystemData::getInstance().GetLineProtocol();
-        DEBUG_PRINTF("\n[HTTP]]Sending Data: \n%s", line_protocol.c_str());
+        DEBUG_PRINTF("\n[HTTP]]Sending Data: \n%s\n", line_protocol.c_str());
         postToInfluxDB(line_protocol);
         vTaskDelay(2000);
     }

@@ -36,12 +36,13 @@ void setup() {
     CREATE_TASK(TemperatureTask, STACK_SIZE(4096), PRIORITY(1));
     CREATE_TASK(GPSTask, STACK_SIZE(4096), PRIORITY(1));
     CREATE_TASK(InstrumentationTask, STACK_SIZE(4096), PRIORITY(3));
-    CREATE_TASK(FrequencyCounterTask, STACK_SIZE(4096), PRIORITY(1));
+    //CREATE_TASK(FrequencyCounterTask, STACK_SIZE(4096), PRIORITY(1));
 }
 
 void loop() {
     SystemData::getInstance().WriteMavlinkData();
     vTaskDelay(1000);
 }
+
 
 

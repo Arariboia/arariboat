@@ -88,20 +88,26 @@ bool TryInitializeIrradiance(ADS1115& adc, int address) {
     return true;
 }
 
-float CalculateIrradiance(ADS1115& adc) {
+float CalculateIrradiance(ADS1115& adc, char* debug_buffer, int buffer_size = 256) {
     int digital_output = adc.readADC_SingleEnded(0);
     float voltage = adc.computeVolts(digital_output);
     
     constexpr float voltage_to_irradiance = 1000.0f / 0.224f;
     float irradiance = voltage * voltage_to_irradiance;
    
-    static unsigned long lastTime = 0;
-    if (millis() - lastTime > 5000) {
-        lastTime = millis();
-        DEBUG_PRINTF("\n[INSTRUMENTATION]ADC: %d\tVoltage: %fV\tIrradiance: %.0fW/m2\n", digital_output, voltage, irradiance);
-    }
+    if (debug_buffer == nullptr) return irradiance;
+    
+    snprintf(debug_buffer + strlen(debug_buffer), buffer_size - strlen(debug_buffer) - 1,
+                "\n[Instrumentation]Irradiance ADC: %d\tVoltage: %.3fV\tIrradiance: %.0fW/m^2\n",
+                digital_output, voltage, irradiance);
 
     return irradiance;
+}
+
+bool EndsWithNewline(const char* str) {
+    if (str == nullptr) return false;
+    size_t len = strlen(str);
+    return len > 0 && str[len - 1] == '\n';
 }
 
 void InstrumentationTask(void* parameter) {
@@ -127,7 +133,7 @@ void InstrumentationTask(void* parameter) {
     }
 
     ADS1115 irradianceADC;
-    irradianceADC.setGain(GAIN_SIXTEEN);
+    irradianceADC.setGain(GAIN_EIGHT);
     irradianceADC.setDataRate(RATE_ADS1115_16SPS);
 
 
@@ -138,9 +144,12 @@ void InstrumentationTask(void* parameter) {
         // In the ADS1115 single ended measurements have 15 bits of resolution. Only differential measurements have 16 bits of resolution.
         // As we are using the 4 analog inputs for each of the 4 sensors, single ended measurements are being used in order to access all 4 sensors.
         // When using single ended mode, the maximum output code is 0x7FFF(32767), which corresponds to the full-scale input voltage.
+
+        char instrumentation_debug_buffer[256];
+        memset(instrumentation_debug_buffer, 0, sizeof(instrumentation_debug_buffer));
         
         if (TryInitializeIrradiance(irradianceADC, 0x49)) {
-            CalculateIrradiance(irradianceADC);
+            SystemData::getInstance().irradiance = CalculateIrradiance(irradianceADC, instrumentation_debug_buffer);
         }
 
         adc.setGain(GAIN_FOUR);
@@ -150,19 +159,21 @@ void InstrumentationTask(void* parameter) {
         float current_port = LinearCorrection(adc.readADC_SingleEnded(1), 0.005653f, -56.366843f);
 
         adc.setGain(GAIN_EIGHT);
-        float current_starboard = LinearCorrection(adc.readADC_SingleEnded(2), 0.005627f, -56.204637f);
-
-        current_starboard = current_starboard - current_port;
+        float current_starboard = LinearCorrection(adc.readADC_SingleEnded(2), 0.005627f, -57.354637f);
 
         adc.setGain(GAIN_EIGHT);
         float current_mppt = LinearCorrection(adc.readADC_SingleEnded(3), 0.001602f, 0.015848f);
 
-        DEBUG_PRINTF("\n[Instrumentation]Battery voltage: %.2fV\n"
-                      "[Instrumentation]Port current: %.2fA\n"
-                      "[Instrumentation]Starboard current: %.2fA\n"
-                      "[Instrumentation]MPPT current: %.2fA\n",
-                      voltage_battery, current_port, current_starboard, current_mppt);
-        
+        snprintf(instrumentation_debug_buffer + strlen(instrumentation_debug_buffer), sizeof(instrumentation_debug_buffer) - strlen(instrumentation_debug_buffer) - 1,
+                "%s[Instrumentation]Battery voltage: %.2fV\n"
+                "[Instrumentation]Port current: %.2fA\n"
+                "[Instrumentation]Starboard current: %.2fA\n"
+                "[Instrumentation]MPPT current: %.2fA\n",
+                EndsWithNewline(instrumentation_debug_buffer) ? "" : "\n",
+                voltage_battery, current_port, current_starboard, current_mppt);
+
+        DEBUG_PRINTF("%s", instrumentation_debug_buffer);
+
         SystemData::getInstance().all_info.battery_voltage = voltage_battery;
         SystemData::getInstance().all_info.motor_current_left = current_port;
         SystemData::getInstance().all_info.motor_current_right = current_starboard;

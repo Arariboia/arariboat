@@ -8,6 +8,7 @@ public:
     static SystemData& getInstance();
 
     mavlink_all_info_t all_info;
+    float irradiance;
 
     void WriteMavlinkData();
 
