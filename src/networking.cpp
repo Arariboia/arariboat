@@ -1,11 +1,10 @@
 #include <Arduino.h>
 #include <WiFi.h> // Main library for WiFi connectivity, also used by AsyncWebServer.
 #include <unordered_map> // Hashtable for storing WiFi credentials.
-#include "ESPAsyncWebServer.h" // Make sure to include Husarnet before this.
+#include "ESPAsyncWebServer.h"
 #include "AsyncElegantOTA.h" // Over the air updates for the ESP32.
 #include "ESPmDNS.h" // Required for mDNS service discovery.
 #include "Utilities.hpp" // Custom utility macros and functions.
-#include "InfluxDB.hpp" // Custom InfluxDB client for sending data to InfluxDB.
 
 static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
     
@@ -145,7 +144,6 @@ void ServerTask(void* parameter) {
     while (true) {
         String line_protocol = SystemData::getInstance().GetLineProtocol();
         DEBUG_PRINTF("\n[HTTP]]Sending Data: \n%s\n", line_protocol.c_str());
-        postToInfluxDB(line_protocol);
         vTaskDelay(2000);
     }
 }

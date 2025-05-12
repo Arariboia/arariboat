@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Utilities.hpp"
 
+
 #define STRINGS_ARE_EQUAL(a, b) strcmp(a, b) == 0
 
 static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
@@ -32,33 +33,6 @@ void BlinkNotify(const char* command) {
     esp_event_post_to(eventLoop, COMMAND_BASE, 0, commandCopy, strlen(commandCopy) + 1, portMAX_DELAY);
 } 
 
-
-static void BuzzerWrite(int blink_rate) {
-    constexpr uint8_t pinBuzzer = PIN_BUZZER;
-    static uint8_t pattern_position = 0;
-
-    //ledcAttachPin(pinBuzzer, 0);
-    ledcSetup(0, 5000, 8); // 5 kHz PWM, 8-bit resolution
-    ledcAttachPin(pinBuzzer, 0);
-
-    constexpr uint8_t pattern[] = {1, 0, 1, 0, 1, 1, 0, 0}; // Example pattern
-
-    // Calculate the position within the pattern
-    constexpr uint8_t patternSize = sizeof(pattern) / sizeof(pattern[0]);
-    uint8_t patternPosition = pattern_position % patternSize;
-
-    // Determine the buzzer state based on the pattern
-    bool buzzerState = pattern[patternPosition] != 0;
-
-    if (blink_rate == BlinkRate::Fast) {
-        ledcWrite(0, buzzerState ? 120 : 0);
-    } else {
-        ledcWrite(0, 0);
-    }
-
-    pattern_position++;
-}
-
 // Tasks can send notifications here to change the blink rate of the LED in order to communicate the status of the boat.
 void LedBlinkerTask(void* parameter) {
 
@@ -75,7 +49,6 @@ void LedBlinkerTask(void* parameter) {
         static uint32_t previous_blink_time = millis();
         if (millis() - previous_blink_time > blink_rate) {
             previous_blink_time = millis();
-            BuzzerWrite(blink_rate);
             digitalWrite(pinLED, !digitalRead(pinLED));
         }
            

@@ -1,8 +1,6 @@
 #pragma once
 #include "data.hpp" // Singleton class for storing system-data that needs to be accessed by multiple tasks.
 #include "event_loop.hpp" //Event loop to handle events between tasks. This allows tasks to communicate with each other with loosely coupled code.
-#include "logger.hpp" // Logger class for logging messages at a specified interval.
-#include "blinker.hpp" // Blinker class for controlling the onboard LED.
 #include "led.hpp" // LED class for controlling the onboard LED.
 
 //*********************************************************/

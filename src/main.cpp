@@ -22,7 +22,6 @@ TaskHandle_t TemperatureTaskHandle = nullptr;
 TaskHandle_t GPSTaskHandle = nullptr;
 TaskHandle_t InstrumentationTaskHandle = nullptr;
 TaskHandle_t TimestampTaskHandle = nullptr;
-TaskHandle_t FrequencyCounterTaskHandle = nullptr;
 
 void setup() {
 
@@ -36,7 +35,6 @@ void setup() {
     CREATE_TASK(TemperatureTask, STACK_SIZE(4096), PRIORITY(1));
     CREATE_TASK(GPSTask, STACK_SIZE(4096), PRIORITY(1));
     CREATE_TASK(InstrumentationTask, STACK_SIZE(4096), PRIORITY(3));
-    //CREATE_TASK(FrequencyCounterTask, STACK_SIZE(4096), PRIORITY(1));
 }
 
 void loop() {

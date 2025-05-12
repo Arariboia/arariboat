@@ -18,13 +18,12 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
 
 void TimestampTask(void *parameter) {
 
-    auto logger = Logger("TimestampTask started");
+    Serial.printf("[TimestampTask] Started\n");
 
     while (WiFi.status() != WL_CONNECTED) {
-        logger.log("[TIME]Waiting for WiFi connection...", 3000);
+        Serial.printf("[TIME] Waiting for WiFi connection...\n");
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    logger.stop();
 
     //Change those values when moving to another timezone
     ESP32Time RTC = ESP32Time();
@@ -35,17 +34,16 @@ void TimestampTask(void *parameter) {
     configTime(gmtSecOffset, daylightSecOffset, "south-america.pool.ntp.org");
     struct tm timeinfo;
     while (!getLocalTime(&timeinfo)) {
-		logger.log("[TIME]Failed to obtain network time", 30000);
-		vTaskDelay(pdMS_TO_TICKS(3000));
-	}
-    logger.stop();
-    logger.log("[TIME]Network time obtained");
+        Serial.printf("[TIME] Failed to obtain network time\n");
+        vTaskDelay(pdMS_TO_TICKS(3000));
+    }
+    Serial.printf("[TIME] Network time obtained\n");
 
-	RTC.setTimeStruct(timeinfo); 
+    RTC.setTimeStruct(timeinfo); 
 
     esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &RTC);
 
-	/*------------------------------------*/
+    /*------------------------------------*/
 
     while (true) {
 
