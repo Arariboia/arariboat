@@ -37,48 +37,48 @@
 
 */
 
-struct VoltageData {
+typedef struct {
     uint16_t cumulative_voltage_decivolts; // Cumulative voltage (0.1V)
     uint16_t current_deciamps; // Current (0.1A)
     uint16_t soc_decipercent; // State of charge (0.1%)
-};
+} voltage_data_t;
 
-struct ChargeDischargeStatus {
+typedef struct {
     uint8_t state;                    // 0 = stationary, 1 = charging, 2 = discharging
     uint8_t charge_mos;               // 0 = off, 1 = on
     uint8_t discharge_mos;            // 0 = off, 1 = on
     uint8_t bms_life_cycles;          // 0–255
     uint32_t remaining_capacity_raw;  // Units: mAh
-};
+} charge_discharge_status_t;
 
-struct BMSStatus {
+typedef struct {
     uint8_t num_strings;              // Number of battery strings
     uint8_t num_temp_sensors;         // Number of temperature sensors
     uint8_t charger_status;           // 0 = not connected, 1 = connected
     uint8_t load_status;              // 0 = not connected, 1 = connected
     uint8_t io_bitfield;              // Bitmask of DI/DO pins
-};
+} bms_status_t;
 
-struct CellVoltageFrame {
+typedef struct {
     uint8_t frame_index;              // Frame number (0–15), 0xFF = invalid
     uint16_t voltages_mv[3];          // Up to 3 voltages per frame, in millivolts
-};
+} cell_voltage_frame_t;
 
-struct TemperatureFrame {
+typedef struct {
     uint8_t frame_index;              // Frame number (0–2)
     uint8_t raw_temps[7];             // Temperature values with offset of +40°C
-};
+} temperature_frame_t;
 
-struct FailureStatus {
+typedef struct {
     uint8_t raw[8];                   // Full raw 8-byte error status payload
-};
+} failure_status_t;
 
-struct BMSData {
-    VoltageData voltage_data;
-    ChargeDischargeStatus charge_discharge_status;
-    BMSStatus bms_status;
-    CellVoltageFrame cell_voltage_frame[16]; // 16 frames, each with up to 3 voltages
-    TemperatureFrame temperature_frame[3];    // 3 frames, each with up to 7 temperatures
-    FailureStatus failure_status;              // 8-byte error status
+typedef struct {
+    voltage_data_t voltage_data;
+    charge_discharge_status_t charge_discharge_status;
+    bms_status_t bms_status;
+    cell_voltage_frame_t cell_voltage_frame[16]; // 16 frames, each with up to 3 voltages
+    temperature_frame_t temperature_frame[3];    // 3 frames, each with up to 7 temperatures
+    failure_status_t failure_status;              // 8-byte error status
     uint32_t timestamp_ms;
-};
+} bms_data_t;

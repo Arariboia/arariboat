@@ -1,14 +1,14 @@
 #pragma once
 #include <Arduino.h>
 
-struct MotorElectricalData {
+typedef struct {
     uint16_t bus_voltage_dV; // Bus voltage in 0.1V units
     int16_t bus_current_dA; // Bus current in 0.1A units (signed)
     int16_t phase_current_dA; // Phase current in 0.1A units (signed)
     int16_t rpm; // RPM per bit (signed, offset 32000)
-};
+} motor_electrical_data_t;
 
-struct MotorStateData {
+typedef struct  {
     int8_t controller_temp_C;      // Controller temperature in Celsius units (signed)
     int8_t motor_temp_C;           // Motor temperature in Celsius units (signed)
     uint8_t accelerator_percent;   // Accelerator pedal position in percent (0-100)
@@ -65,16 +65,16 @@ struct MotorStateData {
      * 21: Software
      */
     uint32_t error;                // Error codes (bitmask, see above)
-};
+} motor_state_data_t;
 
-enum MotorIndex {
+enum motor_index {
     LEFT_MOTOR = 0,
     RIGHT_MOTOR = 1
 };
 
-struct MotorData {
-    MotorElectricalData electrical_data;
-    MotorStateData state_data;
-    MotorIndex motor_index;
+typedef struct {
+    motor_electrical_data_t electrical_data;
+    motor_state_data_t state_data;
+    motor_index motor_index;
     uint32_t timestamp_ms;
-};
+} motor_data_t;
