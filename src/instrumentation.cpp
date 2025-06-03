@@ -4,6 +4,7 @@
 #include <Wire.h> // Required for the ADS1115 ADC and communication with the LoRa board.
 #include "Utilities.hpp" // Custom utility macros and functions.
 #include "arariboat/mavlink.h" // Custom mavlink dialect for the boat generated using Mavgen tool.
+#include "data_instrumentation.h" // Data structs for instrumentation data
 
 /* 
 The ADS1115 is a Delta-sigma (ΔΣ) ADC, based on the principle of
@@ -51,13 +52,13 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
 
         Serial.printf("\n[Instrumentation]Reading ADC values\n");
         adc->setGain(GAIN_FOUR);
-        float voltage_battery = LinearCorrection(adc->readADC_SingleEnded(0), 0.002472f, 0.801442);
+        float battery_current = LinearCorrection(adc->readADC_SingleEnded(0), 0.002472f, 0.801442);
 
         adc->setGain(GAIN_EIGHT);
-        float current_port = LinearCorrection(adc->readADC_SingleEnded(1), 0.005653f, -56.366843f);
+        float current_motor_left = LinearCorrection(adc->readADC_SingleEnded(1), 0.005653f, -56.366843f);
 
         adc->setGain(GAIN_EIGHT);
-        float current_starboard = LinearCorrection(adc->readADC_SingleEnded(2), 0.005627f, -56.204637f);
+        float current_motor_right = LinearCorrection(adc->readADC_SingleEnded(2), 0.005627f, -56.204637f);
 
         adc->setGain(GAIN_EIGHT);
         float current_mppt = LinearCorrection(adc->readADC_SingleEnded(3), 0.001602f, 0.015848f);
@@ -66,7 +67,7 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
                       "[Instrumentation]Port current: %.2fA\n"
                       "[Instrumentation]Starboard current: %.2fA\n"
                       "[Instrumentation]MPPT current: %.2fA\n",
-                      voltage_battery, current_port, current_starboard, current_mppt);
+                      battery_current, current_motor_left, current_motor_right, current_mppt);
         
     }
 }
@@ -112,7 +113,9 @@ bool EndsWithNewline(const char* str) {
 
 void InstrumentationTask(void* parameter) {
     
-    Wire.begin(); // I2C master mode to communicate with the ADS1115 ADC
+    constexpr gpio_num_t i2c_scl = GPIO_NUM_19;
+    constexpr gpio_num_t i2c_sda = GPIO_NUM_21;
+    Wire.begin(i2c_sda, i2c_scl); // Initialize I2C with the specified SDA and SCL pins.
 
     ADS1115 adc;
     constexpr uint8_t adc_addresses[] = {0x48}; // Address is determined by a solder bridge or jumper on the instrumentation board.
@@ -148,37 +151,33 @@ void InstrumentationTask(void* parameter) {
         char instrumentation_debug_buffer[256];
         memset(instrumentation_debug_buffer, 0, sizeof(instrumentation_debug_buffer));
         
-        if (TryInitializeIrradiance(irradianceADC, 0x49)) {
-            SystemData::getInstance().irradiance = CalculateIrradiance(irradianceADC, instrumentation_debug_buffer);
-        }
+        //if (TryInitializeIrradiance(irradianceADC, 0x49)) {
+        //    //Implement something here
+        //}
 
-        adc.setGain(GAIN_FOUR);
-        float voltage_battery = LinearCorrection(adc.readADC_SingleEnded(0), 0.002472f, 0.801442);
+        adc.setGain(GAIN_ONE);
+        float battery_current = LinearCorrection(adc.readADC_SingleEnded(0), 0.013063f, -227.935685f);
 
-        adc.setGain(GAIN_EIGHT);
-        float current_port = LinearCorrection(adc.readADC_SingleEnded(1), 0.005653f, -56.366843f);
+        adc.setGain(GAIN_ONE);
+        float current_motor_left = LinearCorrection(adc.readADC_SingleEnded(1), 0.004162f, -54.649315f);
 
-        adc.setGain(GAIN_EIGHT);
-        float current_starboard = LinearCorrection(adc.readADC_SingleEnded(2), 0.005627f, -57.354637f);
+        adc.setGain(GAIN_ONE);
+        float current_motor_right = LinearCorrection(adc.readADC_SingleEnded(2), 0.004176, -54.880628);
 
-        adc.setGain(GAIN_EIGHT);
-        float current_mppt = LinearCorrection(adc.readADC_SingleEnded(3), 0.001602f, 0.015848f);
+        adc.setGain(GAIN_ONE);
+        float current_mppt = LinearCorrection(adc.readADC_SingleEnded(3), 0.004146, -54.474844);
 
         snprintf(instrumentation_debug_buffer + strlen(instrumentation_debug_buffer), sizeof(instrumentation_debug_buffer) - strlen(instrumentation_debug_buffer) - 1,
-                "%s[Instrumentation]Battery voltage: %.2fV\n"
-                "[Instrumentation]Port current: %.2fA\n"
-                "[Instrumentation]Starboard current: %.2fA\n"
-                "[Instrumentation]MPPT current: %.2fA\n",
-                EndsWithNewline(instrumentation_debug_buffer) ? "" : "\n",
-                voltage_battery, current_port, current_starboard, current_mppt);
+            "%s[Instrumentation]Battery current: %.2fA\n"
+            "[Instrumentation]Left motor current: %.2fA\n"
+            "[Instrumentation]Right motor current: %.2fA\n"
+            "[Instrumentation]MPPT current: %.2fA\n",
+            EndsWithNewline(instrumentation_debug_buffer) ? "" : "\n",
+            battery_current, current_motor_left, current_motor_right, current_mppt);
 
         DEBUG_PRINTF("%s", instrumentation_debug_buffer);
 
-        SystemData::getInstance().all_info.battery_voltage = voltage_battery;
-        SystemData::getInstance().all_info.motor_current_left = current_port;
-        SystemData::getInstance().all_info.motor_current_right = current_starboard;
-        SystemData::getInstance().all_info.mppt_current = current_mppt;
-        
+    
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
