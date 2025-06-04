@@ -13,6 +13,9 @@ typedef Adafruit_ADS1115 ADS1115; //Shorter alias for the ADS1115 class from Ada
 constexpr uint8_t currents_adc_address = 0x48;
 constexpr uint8_t voltages_adc_address = 0x49;
 
+// INA226 I2C Address for Auxiliary Battery
+constexpr uint8_t aux_battery_ina226_address = 0x40;
+
 // EEPROM I2C Addresses (MUST BE UNIQUE AND MATCH HARDWARE)
 constexpr uint8_t currents_board_eeprom_address = 0x50;
 constexpr uint8_t voltages_board_eeprom_address = 0x51;
@@ -74,20 +77,20 @@ const BoardCalibrationData DEFAULT_VOLTAGES_BOARD_CAL = {
 uint8_t read_byte_from_eeprom(uint8_t eeprom_i2c_address, uint16_t byte_offset_in_struct) {
     Wire.beginTransmission(eeprom_i2c_address);
     Wire.write((uint8_t)(EEPROM_STRUCT_BASE_ADDR + byte_offset_in_struct)); 
-    Wire.endTransmission(false);
+    Wire.endTransmission(false); // Send restart to keep connection active for read
     Wire.requestFrom(eeprom_i2c_address, (uint8_t)1);
     if (Wire.available()) {
         return Wire.read();
     }
     DEBUG_PRINTF("[ERROR] Failed to read from EEPROM 0x%X at offset %u\n", eeprom_i2c_address, byte_offset_in_struct);
-    return 0;
+    return 0; // Return 0 on failure
 }
 
 bool write_byte_to_eeprom(uint8_t eeprom_i2c_address, uint16_t byte_offset_in_struct, uint8_t value) {
     Wire.beginTransmission(eeprom_i2c_address);
-    Wire.write((uint8_t)(EEPROM_STRUCT_BASE_ADDR + byte_offset_in_struct));
-    Wire.write(value);
-    if (Wire.endTransmission() != 0) {
+    Wire.write((uint8_t)(EEPROM_STRUCT_BASE_ADDR + byte_offset_in_struct)); // EEPROM memory address
+    Wire.write(value); // Data byte
+    if (Wire.endTransmission() != 0) { // Returns 0 on success
         DEBUG_PRINTF("[ERROR] Failed to write to EEPROM 0x%X at offset %u value %u\n", eeprom_i2c_address, byte_offset_in_struct, value);
         return false;
     }
@@ -112,7 +115,7 @@ void save_struct_to_eeprom(const T& data_struct, uint8_t eeprom_i2c_address) {
         if (!write_byte_to_eeprom(eeprom_i2c_address, i, ptr[i])) {
             all_success = false;
         }
-        vTaskDelay(pdMS_TO_TICKS(10)); 
+        vTaskDelay(pdMS_TO_TICKS(10)); // Delay for EEPROM write cycle
     }
     if (all_success) {
         DEBUG_PRINTF("[Calibration] Saved struct to EEPROM 0x%X successfully.\n", eeprom_i2c_address);
@@ -161,14 +164,16 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
     } else if (STRINGS_ARE_EQUAL(command, "savecal")) {
         DEBUG_PRINTF("[Calibration] Cmd 'savecal': Saving Currents Board calibrations to EEPROM 0x%X.\n", currents_board_eeprom_address);
         save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-        // To save voltages board: save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
+        DEBUG_PRINTF("[Calibration] Cmd 'savecal': Saving Voltages Board calibrations to EEPROM 0x%X.\n", voltages_board_eeprom_address);
+        save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
     } else if (STRINGS_ARE_EQUAL(command, "loaddefcal")) {
         DEBUG_PRINTF("[Calibration] Cmd 'loaddefcal': Loading default Currents Board calibrations and saving to EEPROM 0x%X.\n", currents_board_eeprom_address);
         initialize_default_calibrations_for_board(currents_board_cal_data, true);
         save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-        // To load defaults for voltages board:
-        // initialize_default_calibrations_for_board(voltages_board_cal_data, false);
-        // save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
+        
+        DEBUG_PRINTF("[Calibration] Cmd 'loaddefcal': Loading default Voltages Board calibrations and saving to EEPROM 0x%X.\n", voltages_board_eeprom_address);
+        initialize_default_calibrations_for_board(voltages_board_cal_data, false);
+        save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
     }
 }
 
@@ -179,7 +184,7 @@ bool EndsWithNewline(const char* str) { /* ... remains the same ... */
     size_t len = strlen(str);
     return len > 0 && str[len - 1] == '\n';
 }
-INA226 aux_battery_monitor(0x40);
+
 bool i2c_scan() { // ... remains the same ...
     bool device_found = false;
     Serial.println("Scanning I2C bus...");
@@ -194,27 +199,21 @@ bool i2c_scan() { // ... remains the same ...
     return device_found;
 }
 
-void get_readings_ina226() { // ... remains the same ...
-    float busVoltage = aux_battery_monitor.getBusVoltage();
-    float current = aux_battery_monitor.getCurrent_mA();
-    float power = aux_battery_monitor.getPower_mW();
-    float shuntVoltage = aux_battery_monitor.getShuntVoltage_mV();
-    Serial.printf("INA226: Bus Voltage: %.3f V\tShunt Voltage: %.3f mV\tCurrent: %.3f mA\tPower: %.3f mW\n", busVoltage, shuntVoltage, current, power);
-}
-
 void InstrumentationTask(void* parameter) {
     
     constexpr gpio_num_t i2c_scl = GPIO_NUM_19;
     constexpr gpio_num_t i2c_sda = GPIO_NUM_21;
-    Wire.begin(i2c_sda, i2c_scl);
+    Wire.begin(i2c_sda, i2c_scl); // Initialize I2C bus
 
     ADS1115 currentsAdc;
     ADS1115 voltagesAdc;
+    INA226 aux_battery_monitor(aux_battery_ina226_address); // INA226 for auxiliary battery
     
     bool is_currents_adc_initialized = false;
     bool is_voltages_adc_initialized = false;
     bool is_currents_cal_loaded = false;
     bool is_voltages_cal_loaded = false;
+    bool is_aux_battery_monitor_initialized = false; // Flag for INA226
     
     // For ESP-IDF event loop, handler_args might need to be a struct containing pointers to ADCs and cal_loaded flags
     // For simplicity, if commandCallback is called directly from Serial, pass &currentsAdc.
@@ -223,7 +222,7 @@ void InstrumentationTask(void* parameter) {
     DEBUG_PRINTF("[Instrumentation] Starting main measurement loop.\n");
 
     while (true) {
-        char instrumentation_debug_buffer[512]; 
+        char instrumentation_debug_buffer[768]; // Increased buffer size for more data
         memset(instrumentation_debug_buffer, 0, sizeof(instrumentation_debug_buffer));
         size_t buffer_current_len = 0;
 
@@ -234,8 +233,9 @@ void InstrumentationTask(void* parameter) {
                 currentsAdc.setDataRate(RATE_ADS1115_16SPS);
                 currentsAdc.setGain(GAIN_ONE); 
                 is_currents_adc_initialized = true;
-            } else { /* Log failure, non-blocking */ }
+            } else { DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) init failed.\n", currents_adc_address); /* Log failure, non-blocking */ }
         }
+
         if (is_currents_adc_initialized && !is_currents_cal_loaded) {
             DEBUG_PRINTF("[Calibration] Loading for Currents Board (EEPROM 0x%X).\n", currents_board_eeprom_address);
             load_struct_from_eeprom(currents_board_cal_data, currents_board_eeprom_address);
@@ -254,8 +254,9 @@ void InstrumentationTask(void* parameter) {
                 voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
                 voltagesAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency with irradiance cal
                 is_voltages_adc_initialized = true;
-            } else { /* Log failure, non-blocking */ }
+            } else { DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) init failed.\n", voltages_adc_address);/* Log failure, non-blocking */ }
         }
+        
         if (is_voltages_adc_initialized && !is_voltages_cal_loaded) {
             DEBUG_PRINTF("[Calibration] Loading for Voltages Board (EEPROM 0x%X).\n", voltages_board_eeprom_address);
             load_struct_from_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
@@ -267,7 +268,20 @@ void InstrumentationTask(void* parameter) {
             is_voltages_cal_loaded = true;
         }
 
-        // --- Perform measurements ---
+        // --- AUXILIARY BATTERY MONITOR (INA226) ---
+        if (!is_aux_battery_monitor_initialized) {
+            if (aux_battery_monitor.begin()) { // Address was set in constructor
+                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
+                // Configure INA226 (max current, shunt resistance, normalize LSB)
+                aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
+                is_aux_battery_monitor_initialized = true;
+            } else {
+                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
+                /* Log failure, non-blocking, will retry next loop */
+            }
+        }
+
+        // --- Perform measurements and build output string ---
         if (is_currents_adc_initialized && is_currents_cal_loaded) {
             // Assuming channel 0-3 for battery, motor L, motor R, MPPT current respectively
             float battery_current     = LinearCorrection(currentsAdc.readADC_SingleEnded(0), currents_board_cal_data.calibrations[0].slope, currents_board_cal_data.calibrations[0].intercept);
@@ -276,18 +290,18 @@ void InstrumentationTask(void* parameter) {
             float current_mppt        = LinearCorrection(currentsAdc.readADC_SingleEnded(3), currents_board_cal_data.calibrations[3].slope, currents_board_cal_data.calibrations[3].intercept);
 
             buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len, 
-                                     sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                     "%s[Currents ADC 0x%X | EEPROM 0x%X]\n"
-                                     "  Batt: %.2fA, MotL: %.2fA, MotR: %.2fA, MPPT: %.2fA\n",
-                                     (buffer_current_len == 0) ? "" : "\n", // Add newline if not first entry
-                                     currents_adc_address, currents_board_eeprom_address,
-                                     battery_current, current_motor_left, current_motor_right, current_mppt);
+                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                                           "%s[Currents ADC 0x%X | EEPROM 0x%X]\n"
+                                           "  Batt: %.2fA, MotL: %.2fA, MotR: %.2fA, MPPT: %.2fA\n",
+                                           (buffer_current_len == 0) ? "" : "\n", // Add newline if not first entry
+                                           currents_adc_address, currents_board_eeprom_address,
+                                           battery_current, current_motor_left, current_motor_right, current_mppt);
         } else {
             buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                     sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                     "%s[Currents Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
-                                     (buffer_current_len == 0) ? "" : "\n",
-                                     currents_adc_address, currents_board_eeprom_address);
+                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                                           "%s[Currents Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
+                                           (buffer_current_len == 0) ? "" : "\n",
+                                           currents_adc_address, currents_board_eeprom_address);
         }
 
         if (is_voltages_adc_initialized && is_voltages_cal_loaded) {
@@ -302,25 +316,48 @@ void InstrumentationTask(void* parameter) {
             float irradiance_sensor_voltage_V = voltagesAdc.computeVolts(raw_adc_irradiance_ch);
 
             buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                     sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                     "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
-                                     "  Irradiance: %.0f W/m^2 (RawADC: %d, Sensor V: %.3fV)\n",
-                                     (buffer_current_len == 0) ? "" : "\n",
-                                     voltages_adc_address, voltages_board_eeprom_address,
-                                     irradiance, raw_adc_irradiance_ch, irradiance_sensor_voltage_V);
+                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                                           "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
+                                           "  Irradiance: %.0f W/m^2 (RawADC: %d, Sensor V: %.3fV)\n",
+                                           (buffer_current_len == 0) ? "" : "\n",
+                                           voltages_adc_address, voltages_board_eeprom_address,
+                                           irradiance, raw_adc_irradiance_ch, irradiance_sensor_voltage_V);
             // You can add readings for calibrations[1] through [3] from voltagesAdc if they are used for other sensors.
         } else {
             buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                     sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                     "%s[Voltages Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
-                                     (buffer_current_len == 0) ? "" : "\n",
-                                     voltages_adc_address, voltages_board_eeprom_address);
+                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                                           "%s[Voltages Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
+                                           (buffer_current_len == 0) ? "" : "\n",
+                                           voltages_adc_address, voltages_board_eeprom_address);
+        }
+        
+        // --- Readings from Auxiliary Battery Monitor (INA226) ---
+        if (is_aux_battery_monitor_initialized) {
+            float aux_bus_voltage = aux_battery_monitor.getBusVoltage();
+            // Apply the specific calibration for current: * 0.786f + 8.48E-3f
+            float aux_current = aux_battery_monitor.getCurrent() * 0.786f + 0.00848f; 
+            float aux_power = aux_battery_monitor.getPower();
+            // float aux_shunt_voltage_mv = aux_battery_monitor.getShuntVoltage_mV(); // Optional for debugging
+
+            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                                           "%s[Aux Battery INA226 0x%X]\n"
+                                           "  Aux V: %.2fV, Aux I: %.3fA, Aux P: %.2fW\n",
+                                           (buffer_current_len == 0) ? "" : "\n",
+                                           aux_battery_ina226_address,
+                                           aux_bus_voltage, aux_current, aux_power);
+        } else {
+            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                                           "%s[Aux Battery INA226 (0x%X) not ready.]\n",
+                                           (buffer_current_len == 0) ? "" : "\n",
+                                           aux_battery_ina226_address);
         }
         
         if (buffer_current_len > 0 && (buffer_current_len < sizeof(instrumentation_debug_buffer))) {
-            DEBUG_PRINTF("%s", instrumentation_debug_buffer);
+            DEBUG_PRINTF("\n--- Instrumentation Tick ---\n%s--- End Tick ---\n", instrumentation_debug_buffer);
         }
         
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Consolidated delay for the main loop (was 500ms)
     }
 }
