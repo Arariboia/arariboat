@@ -1,17 +1,16 @@
 #include "mppt.h"
 
-// --- Constants for Modbus Registers (Self-documenting code) ---
-const uint16_t REG_RATED_DATA       = 0x3100; // PV/Battery voltage, current, power
+// --- Constants for Modbus Registers ---
+const uint16_t REG_ELECTRICAL_DATA  = 0x3100; // PV/Battery voltage, current
 const uint16_t REG_STATUS_DATA      = 0x3200; // Battery and equipment status flags
-const uint16_t REG_BATT_CURRENT     = 0x331B; // Net battery current
+const uint16_t REG_NET_BATT_CURRENT = 0x331B; // Net battery current (32-bit)
 
-// --- Polling Configuration ---
-const uint32_t POLL_INTERVAL_MS     = 2000; // Poll the next register every 2 seconds
 
 // Defines the order in which registers are polled.
+// Note the function names have been updated for clarity.
 const MPPTController::RegistryPollFunc MPPTController::_registryPollFunctions[] = {
-    &MPPTController::pollRatedData,
-    &MPPTController::pollBatteryCurrent,
+    &MPPTController::pollElectricalData,
+    &MPPTController::pollNetBatteryCurrent,
     &MPPTController::pollStatusData
 };
 
@@ -19,66 +18,63 @@ const MPPTController::RegistryPollFunc MPPTController::_registryPollFunctions[] 
 // --- Constructor and Setup ---
 MPPTController::MPPTController(Stream& serial, uint8_t slaveId)
     : _serial(serial), _slaveId(slaveId) {
-    // The ModbusMaster object is initialized via the member initializer list
+    // Zero-initialize the data struct on creation.
+    memset(&_data, 0, sizeof(_data));
 }
 
 void MPPTController::begin() {
     _node.begin(_slaveId, _serial);
-	_node.idle([]() {
-		vTaskDelay(pdMS_TO_TICKS(10)); //Allows other tasks to run while waiting for Modbus response
-	});
+    _node.idle([]() {
+        vTaskDelay(pdMS_TO_TICKS(10)); // Allow other tasks to run
+    });
 }
+
 
 // --- Main Update Loop ---
 void MPPTController::update() {
-    // Check if it's time to poll the next register set
     if (millis() - _lastPollTime < POLL_INTERVAL_MS) {
         return;
     }
     _lastPollTime = millis();
 
-    // Call the current function in the polling sequence
-    // The `(this->*_registryPollFunctions[_currentRegistryIndex])()` syntax
-    // is how you call a pointer-to-member-function.
     bool success = (this->*_registryPollFunctions[_currentRegistryIndex])();
 
     if (success) {
-        _data.lastUpdateTime = millis();
+        // Update the timestamp only on a successful read.
+        _data.timestamp_ms = millis();
     }
 
-    // Advance to the next function in the polling sequence for the next update cycle.
     _currentRegistryIndex++;
     if (_currentRegistryIndex >= (sizeof(_registryPollFunctions) / sizeof(_registryPollFunctions[0]))) {
-        _currentRegistryIndex = 0; // Wrap around to the beginning
+        _currentRegistryIndex = 0;
     }
 }
-
 
 // --- Private Data Polling Methods ---
 
-bool MPPTController::pollRatedData() {
-    uint8_t result = _node.readInputRegisters(REG_RATED_DATA, 8);
+bool MPPTController::pollElectricalData() {
+    // Read 6 registers to get PV Voltage/Current and Battery Voltage.
+    // We skip the power registers, but need to read past them.
+    uint8_t result = _node.readInputRegisters(REG_ELECTRICAL_DATA, 8);
     if (result != _node.ku8MBSuccess) {
-        Serial.printf("Error: Failed to read Rated Data (0x%X), code: %d\n", REG_RATED_DATA, result);
+        Serial.printf("Error: Failed to read Electrical Data (0x%X), code: %d\n", REG_ELECTRICAL_DATA, result);
         return false;
     }
-    _data.pvVoltage = _node.getResponseBuffer(0x00) / 100.0f;
-    _data.pvCurrent = _node.getResponseBuffer(0x01) / 100.0f;
-    _data.pvPower = (uint32_t(_node.getResponseBuffer(0x03) << 16) | _node.getResponseBuffer(0x02)) / 100.0f;
-    _data.batteryVoltage = _node.getResponseBuffer(0x04) / 100.0f;
-    _data.batteryChargeCurrent = _node.getResponseBuffer(0x05) / 100.0f;
-    _data.batteryChargePower = (uint32_t(_node.getResponseBuffer(0x07) << 16) | _node.getResponseBuffer(0x06)) / 100.0f;
+    // Store raw integer values directly, no conversion yet.
+    _data.electrical.pv_voltage_cV = _node.getResponseBuffer(0x00);
+    _data.electrical.pv_current_cA = _node.getResponseBuffer(0x01);
+    _data.electrical.battery_voltage_cV = _node.getResponseBuffer(0x04);
     return true;
 }
 
-bool MPPTController::pollBatteryCurrent() {
-    uint8_t result = _node.readInputRegisters(REG_BATT_CURRENT, 2);
+bool MPPTController::pollNetBatteryCurrent() {
+    uint8_t result = _node.readInputRegisters(REG_NET_BATT_CURRENT, 2);
     if (result != _node.ku8MBSuccess) {
-        Serial.printf("Error: Failed to read Battery Current (0x%X), code: %d\n", REG_BATT_CURRENT, result);
+        Serial.printf("Error: Failed to read Net Battery Current (0x%X), code: %d\n", REG_NET_BATT_CURRENT, result);
         return false;
     }
-    // This value is signed, so we must cast to int32_t before division.
-    _data.batteryOverallCurrent = int32_t(uint32_t(_node.getResponseBuffer(0x01) << 16) | _node.getResponseBuffer(0x00)) / 100.0f;
+    // Combine two 16-bit registers into a 32-bit value and store it raw.
+    _data.electrical.battery_current_cA = (int32_t)((uint32_t)_node.getResponseBuffer(0x01) << 16 | _node.getResponseBuffer(0x00));
     return true;
 }
 
@@ -88,30 +84,28 @@ bool MPPTController::pollStatusData() {
         Serial.printf("Error: Failed to read Status Data (0x%X), code: %d\n", REG_STATUS_DATA, result);
         return false;
     }
-    _data.batteryStatus = _node.getResponseBuffer(0x00);
-    _data.equipmentStatus = _node.getResponseBuffer(0x01);
+    _data.state.battery_status = _node.getResponseBuffer(0x00);
+    _data.state.charging_equipment_status = _node.getResponseBuffer(0x01);
     return true;
 }
 
 
-// --- Public Data Printing Methods ---
+// --- Public "On-Demand" Printing Methods ---
 
-void MPPTController::printRatedData() const {
-    Serial.println("--- MPPT Rated Data ---");
-    Serial.printf("PV Voltage:            %.2f V\n", _data.pvVoltage);
-    Serial.printf("PV Current:            %.2f A\n", _data.pvCurrent);
-    Serial.printf("PV Power:              %.2f W\n", _data.pvPower);
-    Serial.printf("Battery Voltage:       %.2f V\n", _data.batteryVoltage);
-    Serial.printf("Battery Charge Current: %.2f A\n", _data.batteryChargeCurrent);
-    Serial.printf("Battery Charge Power:  %.2f W\n", _data.batteryChargePower);
-    Serial.printf("Battery Net Current:   %.2f A\n", _data.batteryOverallCurrent);
-    Serial.println("-------------------------");
+void MPPTController::printHumanReadableElectricalData() const {
+    Serial.println("--- MPPT Electrical Data ---");
+    // Convert to float ONLY for printing
+    Serial.printf("PV Voltage:            %.2f V\n", _data.electrical.pv_voltage_cV / 100.0f);
+    Serial.printf("PV Current:            %.2f A\n", _data.electrical.pv_current_cA / 100.0f);
+    Serial.printf("Battery Voltage:       %.2f V\n", _data.electrical.battery_voltage_cV / 100.0f);
+    Serial.printf("Net Battery Current:   %.2f A\n", _data.electrical.battery_current_cA / 100.0f);
+    Serial.println("----------------------------");
 }
 
-void MPPTController::printBatteryStatus() const {
+void MPPTController::printHumanReadableBatteryStatus() const {
     Serial.println("--- Battery Status ---");
     // Decode D3-D0 for voltage status
-    switch (_data.batteryStatus & 0x0F) {
+    switch (_data.state.battery_status & 0x0F) {
         case 0b0000: Serial.println("Voltage: Normal"); break;
         case 0b0001: Serial.println("Voltage: Overvolt"); break;
         case 0b0010: Serial.println("Voltage: Undervolt"); break;
@@ -119,33 +113,27 @@ void MPPTController::printBatteryStatus() const {
         case 0b0100: Serial.println("Voltage: Fault"); break;
         default:     Serial.println("Voltage: Unknown"); break;
     }
-    // Decode D8 for internal resistance
-    Serial.printf("Internal Resistance: %s\n", isBitSet(_data.batteryStatus, 8) ? "Abnormal" : "Normal");
-    // Decode D15 for rated voltage identification
-    if (isBitSet(_data.batteryStatus, 15)) {
+    Serial.printf("Internal Resistance: %s\n", isBitSet(_data.state.battery_status, 8) ? "Abnormal" : "Normal");
+    if (isBitSet(_data.state.battery_status, 15)) {
         Serial.println("Warning: Wrong identification for rated voltage!");
     }
     Serial.println("----------------------");
 }
 
-void MPPTController::printEquipmentStatus() const {
+void MPPTController::printHumanReadableEquipmentStatus() const {
     Serial.println("--- Equipment Status ---");
-    Serial.printf("Overall Status: %s / %s\n", isBitSet(_data.equipmentStatus, 0) ? "Running" : "Standby", isBitSet(_data.equipmentStatus, 1) ? "FAULT" : "Normal");
+    Serial.printf("Overall Status: %s / %s\n", isBitSet(_data.state.charging_equipment_status, 0) ? "Running" : "Standby", isBitSet(_data.state.charging_equipment_status, 1) ? "FAULT" : "Normal");
 
-    // Decode D3-D2 for charging status
-    switch ((_data.equipmentStatus >> 2) & 0b11) {
+    switch ((_data.state.charging_equipment_status >> 2) & 0b11) {
         case 0b00: Serial.println("Charging: None"); break;
         case 0b01: Serial.println("Charging: Float"); break;
         case 0b10: Serial.println("Charging: Boost"); break;
         case 0b11: Serial.println("Charging: Equalization"); break;
     }
 
-    if (isBitSet(_data.equipmentStatus, 4))  Serial.println("Fault: PV Input Short");
-    if (isBitSet(_data.equipmentStatus, 10)) Serial.println("Fault: Input Over Current");
-    if (isBitSet(_data.equipmentStatus, 13)) Serial.println("Fault: Charging MOSFET Short");
+    if (isBitSet(_data.state.charging_equipment_status, 4))  Serial.println("Fault: PV Input Short");
     
-    // Decode D15-D14 for input voltage status
-    switch ((_data.equipmentStatus >> 14) & 0b11) {
+    switch ((_data.state.charging_equipment_status >> 14) & 0b11) {
         case 0b00: Serial.println("PV Input: Normal"); break;
         case 0b01: Serial.println("PV Input: No Power Connected"); break;
         case 0b10: Serial.println("PV Input: High Voltage"); break;
@@ -154,24 +142,21 @@ void MPPTController::printEquipmentStatus() const {
     Serial.println("------------------------");
 }
 
+
+// Task function to handle all MPPT communication.
 void mppt_task(void *parameters) {
 
-		// --- Configuration ---
-	constexpr gpio_num_t MPPT_RX_PIN = GPIO_NUM_22;
-	constexpr gpio_num_t MPPT_TX_PIN = GPIO_NUM_23;
-	constexpr int MODBUS_SLAVE_ID = 1;
-	const unsigned long PRINT_INTERVAL_MS = 10000; // Print data every 10 seconds
+        // --- Configuration ---
+    constexpr gpio_num_t MPPT_RX_PIN = GPIO_NUM_22;
+    constexpr gpio_num_t MPPT_TX_PIN = GPIO_NUM_23;
+    constexpr int MODBUS_SLAVE_ID = 1;
+    const unsigned long PRINT_INTERVAL_MS = 10000; // How often to print data to Serial
 
-	// Instantiate the controller object, passing the hardware serial port and slave ID.
-	MPPTController mppt(Serial2, MODBUS_SLAVE_ID);
+    // Instantiate the controller object, passing the hardware serial port and slave ID.
+    MPPTController mppt(Serial2, MODBUS_SLAVE_ID);
 
-	unsigned long lastPrintTime = 0;
+    unsigned long lastPrintTime = 0;
 
-
-    // Start the primary serial for monitoring/debugging
-    Serial.begin(115200);
-
-    Serial.println("\n[MPPT] Starting MPPT Controller Sketch...");
 
     // Start the hardware serial for Modbus communication
     Serial2.begin(115200, SERIAL_8N1, MPPT_RX_PIN, MPPT_TX_PIN);
@@ -180,35 +165,32 @@ void mppt_task(void *parameters) {
     mppt.begin();
 
     Serial.println("[MPPT] Setup Complete. Entering main loop...");
+    while (true) {
+        // The update() method handles all Modbus communication and internal timing.
+        mppt.update();
 
-	while (true) {
-		// The update() method handles all Modbus communication and timing internally.
-		// Call this as frequently as possible in your loop.
-		mppt.update();
+        // This block handles printing the data at a fixed interval.
+        if (millis() - lastPrintTime >= PRINT_INTERVAL_MS) {
+            lastPrintTime = millis();
 
-		// This block handles printing the data at a fixed interval,
-		// completely separate from the data polling schedule.
-		if (millis() - lastPrintTime >= PRINT_INTERVAL_MS) {
-			lastPrintTime = millis();
+            // Get a reference to the latest raw data
+            const mppt_data_t& data = mppt.getData();
 
-			// Get the latest data from the controller
-			const MpptData& data = mppt.getData();
+            // Check if data is recent. If the controller is offline, the timestamp stops updating.
+            // We'll consider data stale if it's older than 3 polling cycles.
+            if (data.timestamp_ms > 0 && (millis() - data.timestamp_ms < (POLL_INTERVAL_MS * 3))) {
+                Serial.println(); // Add a blank line for readability
+                // Call the "on-demand" conversion and printing methods
+                mppt.printHumanReadableElectricalData();
+                mppt.printHumanReadableBatteryStatus();
+                mppt.printHumanReadableEquipmentStatus();
+                Serial.printf("MPPT Data at %lu ms:\n", data.timestamp_ms);
+            } else {
+                Serial.println("[Task] Waiting for data from MPPT controller...");
+            }
+        }
 
-			// Check if data has been successfully updated since the last print
-			if (data.lastUpdateTime > 0) {
-				Serial.println(); // Add a blank line for readability
-				mppt.printRatedData();
-				mppt.printBatteryStatus();
-				mppt.printEquipmentStatus();
-			} else {
-				Serial.println("[MPPT] Waiting for first successful data poll...");
-			}
-		}
-
-		// You can add other non-blocking tasks to your main loop here.
-		// A small delay can be added if your loop is otherwise empty.
-		vTaskDelay(pdMS_TO_TICKS(100)); // Yield to other tasks, adjust as needed
-	}
+        // Yield to other tasks.
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 }
-
-
