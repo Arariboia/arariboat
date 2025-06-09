@@ -41,6 +41,7 @@ extern void GPSTask(void* parameter);
 extern void InstrumentationTask(void* parameter);
 extern void TimestampTask(void* parameter);
 extern void FrequencyCounterTask(void* parameter);
+extern void mppt_task(void *parameters);
 
 // Declare a handle for each task to allow manipulation of the task from other tasks, such as sending notifications, resuming or suspending.
 // The handle is initialized to nullptr to avoid the task being created before the setup() function.
