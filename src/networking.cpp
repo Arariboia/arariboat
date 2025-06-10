@@ -44,9 +44,9 @@ void WifiTask(void* parameter) {
         }
 
         WiFi.mode(WIFI_STA);
-        if (LedBlinkerTaskHandle != nullptr) {
-            xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Fast, eSetValueWithOverwrite);
-        }
+        // if (LedBlinkerTaskHandle != nullptr) {
+        //     xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Fast, eSetValueWithOverwrite);
+        // }
 
         for (auto& wifi : wifiCredentials) {
             WiFi.begin(wifi.first, wifi.second);
@@ -57,13 +57,15 @@ void WifiTask(void* parameter) {
                 if (attempts++ > 5) break;
             }
             if (WiFi.status() == WL_CONNECTED) {
-                if (LedBlinkerTaskHandle != nullptr) {
-                    xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Slow, eSetValueWithOverwrite);
-                }
+                // if (LedBlinkerTaskHandle != nullptr) {
+                //     xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Slow, eSetValueWithOverwrite);
+                // }
                 xEventGroupSetBits(system_event_group, BIT_WIFI_CONNECTED); //Signalize that WiFi is connected for time manager
                 break;
             }
         }
+
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 

@@ -195,7 +195,7 @@ void mppt_task(void *parameters) {
                 msg.timestamp.epoch_ms = get_epoch_millis(); // Get the current epoch milliseconds 
 
                 // Send the message to the queue
-                if (xQueueSend(message_queue, &msg, 0) != pdTRUE) {
+                if (xQueueSend(broker_queue, &msg, 0) != pdTRUE) {
                     Serial.println("[MPPT]Error:Queue is full!");
                 } else {
                     Serial.println("[MPPT] MPPT data sent to queue successfully.");

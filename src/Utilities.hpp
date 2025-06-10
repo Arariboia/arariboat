@@ -41,6 +41,7 @@ extern void GPSTask(void* parameter);
 extern void InstrumentationTask(void* parameter);
 extern void time_manager_task(void* parameter);
 extern void mppt_task(void *parameters);
+extern void broker_task(void* parameter);
 
 // Declare a handle for each task to allow manipulation of the task from other tasks, such as sending notifications, resuming or suspending.
 // The handle is initialized to nullptr to avoid the task being created before the setup() function.

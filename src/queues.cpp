@@ -1,7 +1,7 @@
 #include "queues.hpp"
 #include "freertos/FreeRTOS.h"
 
-QueueHandle_t message_queue;
+QueueHandle_t broker_queue;
 QueueHandle_t main_radio_queue;
 QueueHandle_t auxiliary_radio_queue;
 QueueHandle_t internet_queue;
@@ -16,14 +16,14 @@ QueueHandle_t can_queue;
 #define can_queue_length 10
 
 void initialize_queues() {
-    message_queue = xQueueCreate(message_queue_length, sizeof(message_t));
+    broker_queue = xQueueCreate(message_queue_length, sizeof(message_t));
     main_radio_queue = xQueueCreate(main_radio_queue_length, sizeof(message_t));
     auxiliary_radio_queue = xQueueCreate(auxiliary_radio_queue_length, sizeof(message_t));
     internet_queue = xQueueCreate(internet_queue_length, sizeof(message_t));
     logger_queue = xQueueCreate(logger_queue_length, sizeof(message_t));
     can_queue = xQueueCreate(can_queue_length, sizeof(message_t));
 
-    if (message_queue == NULL || main_radio_queue == NULL || auxiliary_radio_queue == NULL ||
+    if (broker_queue == NULL || main_radio_queue == NULL || auxiliary_radio_queue == NULL ||
         internet_queue == NULL || logger_queue == NULL || can_queue == NULL) {
         printf("Failed to create one or more queues.\n");
         //Halt the system

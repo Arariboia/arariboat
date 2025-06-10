@@ -15,21 +15,22 @@ ESP_EVENT_DEFINE_BASE(COMMAND_BASE);
 ESP32Time RTC;
 EventGroupHandle_t system_event_group;
 
-void setup() {
 
+void setup() {
     Serial.begin(BAUD_RATE);
     initialize_event_loop(&eventLoop); // Initialize the event loop to handle events between tasks.
     initialize_queues(); // Initialize the queues used for inter-task communication.
     system_event_group = xEventGroupCreate(); // Create an event group for system-wide events.
     CREATE_TASK(LedBlinkerTask, STACK_SIZE(2048), PRIORITY(1));
     // CREATE_TASK(SerialTask, STACK_SIZE(4096), PRIORITY(1));
-    // CREATE_TASK(WifiTask, STACK_SIZE(4096), PRIORITY(2));
+    CREATE_TASK(WifiTask, STACK_SIZE(4096), PRIORITY(2));
     // CREATE_TASK(ServerTask, STACK_SIZE(8096), PRIORITY(3));
-    // CREATE_TASK(TimestampTask, STACK_SIZE(4096), PRIORITY(2));
+    CREATE_TASK(time_manager_task, STACK_SIZE(4096), PRIORITY(1));
     // CREATE_TASK(TemperatureTask, STACK_SIZE(4096), PRIORITY(1));
     // CREATE_TASK(GPSTask, STACK_SIZE(4096), PRIORITY(1));
     // CREATE_TASK(InstrumentationTask, STACK_SIZE(4096), PRIORITY(3));
-    CREATE_TASK(mppt_task, STACK_SIZE(4096), PRIORITY(2));
+    CREATE_TASK(mppt_task, STACK_SIZE(4096), PRIORITY(3));
+    CREATE_TASK(broker_task, STACK_SIZE(4096), PRIORITY(2));
 }
 
 void loop() {
