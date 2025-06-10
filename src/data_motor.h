@@ -67,14 +67,14 @@ typedef struct  {
     uint32_t error;                // Error codes (bitmask, see above)
 } motor_state_data_t;
 
-enum motor_index {
+typedef enum {
     LEFT_MOTOR = 0,
     RIGHT_MOTOR = 1
-};
+} motor_index_t;
 
 typedef struct {
     motor_electrical_data_t electrical_data;
     motor_state_data_t state_data;
-    motor_index motor_index;
+    motor_index_t motor;
     uint32_t timestamp_ms;
 } motor_data_t;

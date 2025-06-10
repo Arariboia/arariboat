@@ -1,4 +1,6 @@
 #include "mppt.h"
+#include "queues.hpp" // Include the queues header to access the message queue
+#include "time_manager.h" // Include the time manager for timestamping
 
 // --- Constants for Modbus Registers ---
 const uint16_t REG_ELECTRICAL_DATA  = 0x3100; // PV/Battery voltage, current
@@ -16,8 +18,8 @@ const MPPTController::RegistryPollFunc MPPTController::_registryPollFunctions[] 
 
 
 // --- Constructor and Setup ---
-MPPTController::MPPTController(Stream& serial, uint8_t slaveId)
-    : _serial(serial), _slaveId(slaveId) {
+MPPTController::MPPTController(Stream& serial, uint8_t slaveId, TimeProviderFunc timeProvider)
+    : _serial(serial), _slaveId(slaveId), _timeProvider(timeProvider) {
     // Zero-initialize the data struct on creation.
     memset(&_data, 0, sizeof(_data));
 }
@@ -40,8 +42,11 @@ void MPPTController::update() {
     bool success = (this->*_registryPollFunctions[_currentRegistryIndex])();
 
     if (success) {
-        // Update the timestamp only on a successful read.
-        _data.timestamp_ms = millis();
+        if (_timeProvider) {
+            _data.timestamp_ms = _timeProvider(); // Use the provided time function
+        } else {
+            _data.timestamp_ms = millis(); // Fallback to millis if no time provider is set
+        }
     }
 
     _currentRegistryIndex++;
@@ -153,7 +158,7 @@ void mppt_task(void *parameters) {
     const unsigned long PRINT_INTERVAL_MS = 10000; // How often to print data to Serial
 
     // Instantiate the controller object, passing the hardware serial port and slave ID.
-    MPPTController mppt(Serial2, MODBUS_SLAVE_ID);
+    MPPTController mppt(Serial2, MODBUS_SLAVE_ID, getSystemTimestamp);
 
     unsigned long lastPrintTime = 0;
 
@@ -185,6 +190,16 @@ void mppt_task(void *parameters) {
                 mppt.printHumanReadableBatteryStatus();
                 mppt.printHumanReadableEquipmentStatus();
                 Serial.printf("MPPT Data at %lu ms:\n", data.timestamp_ms);
+
+                message_t msg;
+                msg.source = DATA_SOURCE_MPPT; // Set the source to MPPT
+                msg.payload.mppt = data; // Copy the latest MPPT data into the message payload
+                // Send the message to the queue
+                if (xQueueSend(message_queue, &msg, 0) != pdTRUE) {
+                    Serial.println("[MPPT] Failed to send MPPT data to queue!");
+                } else {
+                    Serial.println("[MPPT] MPPT data sent to queue successfully.");
+                }
             } else {
                 Serial.println("[Task] Waiting for data from MPPT controller...");
             }
