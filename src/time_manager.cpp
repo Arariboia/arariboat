@@ -1,12 +1,11 @@
 #include "time_manager.h"
-#include <WiFi.h>
 #include <ESP32Time.h>
 
 // This RTC object is declared as extern in the main .ino file.
 // It's the single source of truth for the current time.
 extern ESP32Time RTC;
 
-void TimeManagerTask(void* parameter) {
+void time_manager_task(void* parameter) {
     Serial.println("[TimeManager] Task started.");
 
     // This task will now loop until time is synchronized from any source.
@@ -35,7 +34,6 @@ void TimeManagerTask(void* parameter) {
 
             constexpr long gmt_seconds_offset = 0;
             constexpr int daylight_seconds_offset = 0;
-
             configTime(gmt_seconds_offset, daylight_seconds_offset, "south-america.pool.ntp.org");
             struct tm timeinfo;
 

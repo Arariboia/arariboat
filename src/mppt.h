@@ -7,15 +7,11 @@
 // The interval to poll the next register in the sequence.
 const uint32_t POLL_INTERVAL_MS = 100;
 
-// A type alias for a function that provides the current timestamp.
-// This makes the controller independent of the actual time source.
-using TimeProviderFunc = std::function<uint32_t()>;
-
 // This class encapsulates all logic and data related to the MPPT charge controller.
 class MPPTController {
 public:
     // Constructor: Initializes the controller with a serial interface and Modbus slave ID.
-    MPPTController(Stream& serial, uint8_t slaveId, TimeProviderFunc timeProvider);
+    MPPTController(Stream& serial, uint8_t slaveId);
 
     // Call once in setup() to configure the ModbusMaster node.
     void begin();
@@ -36,8 +32,7 @@ private:
     ModbusMaster  _node;
     mppt_data_t   _data; // Uses the new, efficient data structure
     Stream&       _serial;
-    uint8_t       _slaveId;
-    TimeProviderFunc _timeProvider;
+    uint8_t       _slaveId;;
     
     unsigned long _lastPollTime = 0;
 

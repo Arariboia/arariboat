@@ -39,8 +39,7 @@ extern void SerialTask(void* parameter);
 extern void TemperatureTask(void* parameter);
 extern void GPSTask(void* parameter);
 extern void InstrumentationTask(void* parameter);
-extern void TimestampTask(void* parameter);
-extern void FrequencyCounterTask(void* parameter);
+extern void time_manager_task(void* parameter);
 extern void mppt_task(void *parameters);
 
 // Declare a handle for each task to allow manipulation of the task from other tasks, such as sending notifications, resuming or suspending.
@@ -54,8 +53,7 @@ extern TaskHandle_t SerialTaskHandle;
 extern TaskHandle_t TemperatureTaskHandle;
 extern TaskHandle_t GPSTaskHandle;
 extern TaskHandle_t InstrumentationTaskHandle;
-extern TaskHandle_t TimestampTaskHandle;
-extern TaskHandle_t FrequencyCounterTaskHandle;
+extern TaskHandle_t time_manager_task_handle;
 
 /// @brief Calibrates a reading by using a linear equation obtained by comparing the readings with a multimeter.
 /// @return Calibrated reading

@@ -18,8 +18,8 @@ const MPPTController::RegistryPollFunc MPPTController::_registryPollFunctions[] 
 
 
 // --- Constructor and Setup ---
-MPPTController::MPPTController(Stream& serial, uint8_t slaveId, TimeProviderFunc timeProvider)
-    : _serial(serial), _slaveId(slaveId), _timeProvider(timeProvider) {
+MPPTController::MPPTController(Stream& serial, uint8_t slaveId)
+    : _serial(serial), _slaveId(slaveId) {
     // Zero-initialize the data struct on creation.
     memset(&_data, 0, sizeof(_data));
 }
@@ -39,22 +39,15 @@ void MPPTController::update() {
     }
     _lastPollTime = millis();
 
-    bool all_success = true;
-
     //Call all registry poll functions in sequence
     for (size_t i = 0; i < sizeof(_registryPollFunctions) / sizeof(_registryPollFunctions[0]); ++i) {
         if (!(this->*_registryPollFunctions[i])()) {
-            all_success = false; // If any poll fails, mark as unsuccessful
+            return; // If any poll fails
         }
     }
 
-    if (all_success) {
-        if (_timeProvider) {
-            _data.timestamp_ms = _timeProvider(); // Use the provided time function
-        } else {
-            _data.timestamp_ms = millis(); // Fallback to millis if no time provider is set
-        }
-    }
+    // Update the timestamp after all data has been polled successfully.
+    _data.timestamp_ms = millis();
     // Serial.printf("[MPPT] Data updated at %lu ms\n", _data.timestamp_ms); //For debugging purposes
 }
 
@@ -158,10 +151,10 @@ void mppt_task(void *parameters) {
     constexpr gpio_num_t MPPT_RX_PIN = GPIO_NUM_22;
     constexpr gpio_num_t MPPT_TX_PIN = GPIO_NUM_23;
     constexpr int MODBUS_SLAVE_ID = 1;
-    const unsigned long PRINT_INTERVAL_MS = 10000; // How often to print data to Serial
+    const unsigned long PRINT_INTERVAL_MS = 2000; // How often to print data to Serial
 
     // Instantiate the controller object, passing the hardware serial port and slave ID.
-    MPPTController mppt(Serial2, MODBUS_SLAVE_ID, getSystemTimestamp);
+    MPPTController mppt(Serial2, MODBUS_SLAVE_ID);
 
     unsigned long lastPrintTime = 0;
 
@@ -197,14 +190,18 @@ void mppt_task(void *parameters) {
                 message_t msg;
                 msg.source = DATA_SOURCE_MPPT; // Set the source to MPPT
                 msg.payload.mppt = data; // Copy the latest MPPT data into the message payload
+                msg.timestamp.time_since_boot_ms = data.timestamp_ms; // Set the timestamp from the MPPT data
+                msg.timestamp.epoch_seconds = get_epoch_seconds(); // Get the current epoch seconds
+                msg.timestamp.epoch_ms = get_epoch_millis(); // Get the current epoch milliseconds 
+
                 // Send the message to the queue
                 if (xQueueSend(message_queue, &msg, 0) != pdTRUE) {
-                    Serial.println("[MPPT] Failed to send MPPT data to queue!");
+                    Serial.println("[MPPT]Error:Queue is full!");
                 } else {
                     Serial.println("[MPPT] MPPT data sent to queue successfully.");
                 }
             } else {
-                Serial.println("[Task] Waiting for data from MPPT controller...");
+                Serial.println("[MPPT] Waiting for data from MPPT controller...");
             }
         }
 

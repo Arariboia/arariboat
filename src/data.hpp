@@ -8,6 +8,13 @@
 #include "data_instrumentation.h"
 #include "data_bms.h"
 
+// A dedicated struct for timestamping
+typedef struct {
+    uint64_t time_since_boot_ms;  // Milliseconds since boot (for local logging/timing)
+    uint32_t epoch_seconds;       // Seconds since Unix epoch (for radio transmission)
+    uint16_t epoch_ms;     // Millisecond part of the second (0-999)
+} timestamp_data_t;
+
 typedef enum {
     DATA_SOURCE_BMS,
     DATA_SOURCE_MOTOR_LEFT,
@@ -28,6 +35,8 @@ typedef struct {
         instrumentation_data_t instrumentation;
         temperature_data_t temperature;
     } payload;
+    
+    timestamp_data_t timestamp; // Timestamp data for when the message was created
 } message_t;
 
 

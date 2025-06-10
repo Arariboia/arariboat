@@ -20,13 +20,22 @@ const EventBits_t BIT_TIME_SYNC_SUCCESS = (1 << 1);
 
 // This is our "Time Provider" function. It's the single source of truth for the time.
 // It is fully decoupled from HOW the time is obtained.
-inline uint32_t getSystemTimestamp() {
+inline uint32_t get_epoch_seconds() {
     // Check the event group to see if the time has been synchronized.
     EventBits_t bits = xEventGroupGetBits(system_event_group);
     if ((bits & BIT_TIME_SYNC_SUCCESS) != 0) {
-        return RTC.getEpoch();
+        return RTC.getEpoch(); //Seconds since UNIX Epoch
     }
-    return millis(); // Return time in milliseconds since boot if time is not synchronized.
+    return 0; // Return 0 if time is not synchronized
+}
+
+inline uint32_t get_epoch_millis() {
+    // Check the event group to see if the time has been synchronized.
+    EventBits_t bits = xEventGroupGetBits(system_event_group);
+    if ((bits & BIT_TIME_SYNC_SUCCESS) != 0) {
+        return RTC.getMillis(); //Milliseconds within the current epoch second
+    }
+    return 0; // Return 0 if time is not synchronized
 }
 
 
@@ -39,5 +48,5 @@ inline uint32_t getSystemTimestamp() {
  * signal that time has been acquired via the system_event_group.
  * * @param parameter Task parameters (unused).
  */
-void TimeManagerTask(void* parameter);
+void time_manager_task(void* parameter);
 
