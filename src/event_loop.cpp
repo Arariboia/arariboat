@@ -3,7 +3,7 @@
 
 esp_event_loop_handle_t eventLoop; //Handle for the event loop to post and subscribe to events
 
-void InitializeEventLoop(esp_event_loop_handle_t* eventLoop) {
+void initialize_event_loop(esp_event_loop_handle_t* eventLoop) {
 
     //Create an event loop with the following parameters
     esp_event_loop_args_t eventLoopArgs = {
