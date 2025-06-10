@@ -2,6 +2,7 @@
 #include "DallasTemperature.h" // For the DS18B20 temperature probes.
 #include "arariboat/mavlink.h" // Custom mavlink dialect for the boat generated using Mavgen tool.
 #include "Utilities.hpp" // Custom utility macros and functions.
+#include "data_temperatures.h" // Header file for temperature-related functions and definitions.
 
 //TODO: Create a heating system to calibrate the temperature probes using thermocouples
 //TODO: Make attaching new probes more dynamic instead of hardcoded. Maybe use a config file to store the addresses of the probes.
@@ -74,48 +75,95 @@ static void PrintDebugTemperature(float battery_left, float battery_right, float
     DEBUG_PRINTF("\n[Temperature]MPPT: %f\n", mppt);
 }
 
+void PrintAllDetectedTemperatures(DallasTemperature& probes) {
+    probes.begin();
+    int device_count = probes.getDeviceCount();
+    if (device_count == 0) {
+        Serial.println("[Temperature] No sensors detected.");
+        return;
+    }
+
+    probes.requestTemperatures();
+
+    for (uint8_t i = 0; i < device_count; i++) {
+        DeviceAddress addr;
+        if (probes.getAddress(addr, i)) {
+            float tempC = probes.getTempC(addr);
+            Serial.print("[Temperature] Sensor ");
+            Serial.print(i);
+            Serial.print(" (");
+            for (uint8_t j = 0; j < 8; j++) {
+                if (addr[j] < 16) Serial.print("0");
+                Serial.print(addr[j], HEX);
+            }
+            Serial.print("): ");
+            if (tempC == DEVICE_DISCONNECTED_C) {
+                Serial.println("Disconnected or error.");
+            } else {
+                Serial.print(tempC);
+                Serial.println(" °C");
+            }
+        } else {
+            Serial.printf("[Temperature] Unable to get address for sensor %d\n", i);
+        }
+    }
+}
+
 void TemperatureTask(void* parameter) {
 
     constexpr uint8_t pin_temperature = PIN_TEMPERATURE; // GPIO used for OneWire communication
     
     OneWire one_wire_device(pin_temperature); // Setup a one_wire_device instance to communicate with any devices that use the OneWire protocol
     DallasTemperature probes(&one_wire_device); // Pass our one_wire_device reference to Dallas Temperature sensor, which uses the OneWire protocol.
-    
+  
+    #define S1 0x28, 0x37, 0x1E, 0x04, 0x00, 0x00, 0x00, 0xA6
+    #define S2 0x28, 0xFF, 0x25, 0x61, 0xA3, 0x16, 0x05, 0x16
+    #define S3 0x28, 0xFF, 0x64, 0x1F, 0x4D, 0xB8, 0xFE, 0xDA
+    #define S4 0x28, 0xCF, 0x67, 0x49, 0xF6, 0x4D, 0x3C, 0xC5
+    #define S5 0x28, 0xFF, 0x6F, 0x10, 0xA0, 0x16, 0x03, 0x5C
+
     //Each probe has a unique 8-byte address. Use the scanIndex method to initially find the addresses of the probes. 
     //Then hardcode the addresses into the program. This is done to avoid the overhead of scanning for the addresses every time the function is called.
     //You should then physically label the probes with tags or stripes as to differentiate them.
-    DeviceAddress thermal_probe_zero = {0x28, 0xFF, 0x7C, 0x1C, 0x72, 0x16, 0x05, 0xF7};
-    DeviceAddress thermal_probe_one = {0x28, 0x86, 0x1C, 0x07, 0xD6, 0x01, 0x3C, 0x8C};
-    DeviceAddress thermal_probe_two = {0x28, 0xFF, 0xA5, 0x12, 0xA0, 0x16, 0x03, 0xC4};
+    DeviceAddress thermal_probe_mppt_left = {S1};
+    DeviceAddress thermal_probe_mppt_right = {S2};
+    DeviceAddress thermal_probe_battery_left = {S3};
+    DeviceAddress thermal_probe_battery_right = {S4};
 
     //Register serial callback commands
     esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &probes);
 
     while (true) {
-        ScanProbeAddresses(probes); 
-        probes.requestTemperatures();
-        float temperature_battery_left = probes.getTempC(thermal_probe_zero);
-        float temperature_battery_right = probes.getTempC(thermal_probe_one);
-        float temperature_mppt = probes.getTempC(thermal_probe_two);
+        // PrintAllDetectedTemperatures(probes); // Generic function to print temperatures from any connected sensor
         
+        probes.begin();
+        int device_count = probes.getDeviceCount();
+        if (device_count == 0) {
+            Serial.println("[Temperature] No sensors detected.");
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+
+        probes.requestTemperatures();
+        float temperature_mppt_left = probes.getTempC(thermal_probe_mppt_left);
+        float temperature_mppt_right = probes.getTempC(thermal_probe_mppt_right);
+        float temperature_battery_left = probes.getTempC(thermal_probe_battery_left);
+        float temperature_battery_right = probes.getTempC(thermal_probe_battery_right);
+        
+        
+        if (temperature_mppt_left != DEVICE_DISCONNECTED_C) {
+            temperature_mppt_left = LinearCorrection(temperature_mppt_left, 1.0f, 0.0f);
+        }
+
+        if (temperature_mppt_right != DEVICE_DISCONNECTED_C) {
+            temperature_mppt_right = LinearCorrection(temperature_mppt_right, 1.0f, 0.0f);
+        }
 
         if (temperature_battery_left != DEVICE_DISCONNECTED_C) {
             temperature_battery_left = LinearCorrection(temperature_battery_left, 1.0f, 0.0f);
         }
 
-        if (temperature_battery_right != DEVICE_DISCONNECTED_C) {
-            temperature_battery_right = LinearCorrection(temperature_battery_right, 1.0f, 1.5f);
-        }
-
-        if (temperature_mppt != DEVICE_DISCONNECTED_C) {
-            temperature_mppt = LinearCorrection(temperature_mppt, 1.0f, 0.0f);
-        }
-
-        PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt);
-
-        SystemData::getInstance().all_info.temperature_battery_left = temperature_battery_left;
-        SystemData::getInstance().all_info.temperature_battery_right = temperature_battery_right;
-        SystemData::getInstance().all_info.temperature_mppt = temperature_mppt;
+        PrintDebugTemperature(temperature_mppt_left, temperature_mppt_right, temperature_battery_left);
 
         vTaskDelay(pdMS_TO_TICKS(500));
     }
