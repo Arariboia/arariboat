@@ -1,37 +1,12 @@
 #include <Arduino.h>
 #include "Utilities.hpp"
 
-
-#define STRINGS_ARE_EQUAL(a, b) strcmp(a, b) == 0
-
-static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
-    
-    const char* command = (const char*)event_data; 
-
-    if (STRINGS_ARE_EQUAL(command, "blinkfast")) {
-        xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Fast, eSetValueWithOverwrite);
-    } else if (STRINGS_ARE_EQUAL(command, "blinkmedium")) {
-        xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Medium, eSetValueWithOverwrite);
-    } else if (STRINGS_ARE_EQUAL(command, "blinkslow")) {
-        xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Slow, eSetValueWithOverwrite);
-    } else if (STRINGS_ARE_EQUAL(command, "blink")) {
-        xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Pulse, eSetValueWithOverwrite);
-    }   
-}
-
 static void FastBlinkPulse(int pin) {
     for (int i = 0; i < 4; i++) {
         digitalWrite(pin, HIGH); vTaskDelay(pdMS_TO_TICKS(50));
         digitalWrite(pin, LOW);  vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
-
-void BlinkNotify(const char* command) {
-    char commandCopy[32];
-    strncpy(commandCopy, command, 32);
-
-    esp_event_post_to(eventLoop, COMMAND_BASE, 0, commandCopy, strlen(commandCopy) + 1, portMAX_DELAY);
-} 
 
 // Tasks can send notifications here to change the blink rate of the LED in order to communicate the status of the boat.
 void LedBlinkerTask(void* parameter) {
@@ -40,9 +15,6 @@ void LedBlinkerTask(void* parameter) {
     pinMode(pinLED, OUTPUT);
     uint32_t blink_rate = BlinkRate::Slow;
     uint32_t previous_blink_rate = blink_rate;
-
-    //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, nullptr);
 
     while (true) {
 
