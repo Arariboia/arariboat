@@ -5,7 +5,7 @@
 
 // --- Configuration Constants ---
 // The interval to poll the next register in the sequence.
-const uint32_t POLL_INTERVAL_MS = 2000;
+const uint32_t POLL_INTERVAL_MS = 100;
 
 // A type alias for a function that provides the current timestamp.
 // This makes the controller independent of the actual time source.
@@ -39,7 +39,6 @@ private:
     uint8_t       _slaveId;
     TimeProviderFunc _timeProvider;
     
-    uint8_t       _currentRegistryIndex = 0;
     unsigned long _lastPollTime = 0;
 
     // A list of the private member functions that perform the Modbus reads.

@@ -39,20 +39,23 @@ void MPPTController::update() {
     }
     _lastPollTime = millis();
 
-    bool success = (this->*_registryPollFunctions[_currentRegistryIndex])();
+    bool all_success = true;
 
-    if (success) {
+    //Call all registry poll functions in sequence
+    for (size_t i = 0; i < sizeof(_registryPollFunctions) / sizeof(_registryPollFunctions[0]); ++i) {
+        if (!(this->*_registryPollFunctions[i])()) {
+            all_success = false; // If any poll fails, mark as unsuccessful
+        }
+    }
+
+    if (all_success) {
         if (_timeProvider) {
             _data.timestamp_ms = _timeProvider(); // Use the provided time function
         } else {
             _data.timestamp_ms = millis(); // Fallback to millis if no time provider is set
         }
     }
-
-    _currentRegistryIndex++;
-    if (_currentRegistryIndex >= (sizeof(_registryPollFunctions) / sizeof(_registryPollFunctions[0]))) {
-        _currentRegistryIndex = 0;
-    }
+    // Serial.printf("[MPPT] Data updated at %lu ms\n", _data.timestamp_ms); //For debugging purposes
 }
 
 // --- Private Data Polling Methods ---
@@ -206,6 +209,6 @@ void mppt_task(void *parameters) {
         }
 
         // Yield to other tasks.
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
