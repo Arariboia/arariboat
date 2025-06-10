@@ -2,7 +2,11 @@
 #include "DallasTemperature.h" // For the DS18B20 temperature probes.
 #include "arariboat/mavlink.h" // Custom mavlink dialect for the boat generated using Mavgen tool.
 #include "Utilities.hpp" // Custom utility macros and functions.
-#include "data_temperatures.h" // Header file for temperature-related functions and definitions.
+#include "data.hpp" // Header file for data structures 
+#include "time_manager.h" // Header file for time management tasks.
+#include "queues.hpp" // Header file for queue initialization and definitions.
+
+const int16_t SENSOR_DISCONNECTED_CDEGC = INT16_MAX;
 
 //TODO: Create a heating system to calibrate the temperature probes using thermocouples
 //TODO: Make attaching new probes more dynamic instead of hardcoded. Maybe use a config file to store the addresses of the probes.
@@ -62,17 +66,26 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
     }
 }
 
-static void PrintDebugTemperature(float battery_left, float battery_right, float mppt) {
-    
+static void PrintDebugTemperature(float battery_left, float battery_right, float mppt_left, float mppt_right) {
     static unsigned long last_print_time = 0;
-    if (millis() - last_print_time < 20000) {
+    if (millis() - last_print_time < 5000) {
         return;
     }
     last_print_time = millis();
 
-    DEBUG_PRINTF("\n[Temperature]Battery Left: %f\n", battery_left);
-    DEBUG_PRINTF("\n[Temperature]Battery Right: %f\n", battery_right);
-    DEBUG_PRINTF("\n[Temperature]MPPT: %f\n", mppt);
+    int16_t battery_left_cdegC  = (battery_left  == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(battery_left  * 100);
+    int16_t battery_right_cdegC = (battery_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(battery_right * 100);
+    int16_t mppt_left_cdegC     = (mppt_left     == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(mppt_left    * 100);
+    int16_t mppt_right_cdegC    = (mppt_right    == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(mppt_right   * 100);
+
+    char buffer[256];
+    int len = 0;
+    len += snprintf(buffer + len, sizeof(buffer) - len, "\n[Temperature]Battery Left: %.2f°C (%d cdegC)\n", battery_left,  battery_left_cdegC);
+    len += snprintf(buffer + len, sizeof(buffer) - len, "[Temperature]Battery Right: %.2f°C (%d cdegC)\n", battery_right, battery_right_cdegC);
+    len += snprintf(buffer + len, sizeof(buffer) - len, "[Temperature]MPPT Left: %.2f°C (%d cdegC)\n", mppt_left, mppt_left_cdegC);
+    len += snprintf(buffer + len, sizeof(buffer) - len, "[Temperature]MPPT Right: %.2f°C (%d cdegC)\n", mppt_right, mppt_right_cdegC);
+
+    DEBUG_PRINTF("%s", buffer);
 }
 
 void PrintAllDetectedTemperatures(DallasTemperature& probes) {
@@ -85,27 +98,34 @@ void PrintAllDetectedTemperatures(DallasTemperature& probes) {
 
     probes.requestTemperatures();
 
+    char buffer[256];
+    size_t len = 0;
+
     for (uint8_t i = 0; i < device_count; i++) {
         DeviceAddress addr;
         if (probes.getAddress(addr, i)) {
             float tempC = probes.getTempC(addr);
-            Serial.print("[Temperature] Sensor ");
-            Serial.print(i);
-            Serial.print(" (");
+            len += snprintf(buffer + len, sizeof(buffer) - len, "[Temperature] Sensor %d (", i);
             for (uint8_t j = 0; j < 8; j++) {
-                if (addr[j] < 16) Serial.print("0");
-                Serial.print(addr[j], HEX);
+                len += snprintf(buffer + len, sizeof(buffer) - len, "%s%02X", (j == 0) ? "" : " ", addr[j]);
             }
-            Serial.print("): ");
+            len += snprintf(buffer + len, sizeof(buffer) - len, "): ");
             if (tempC == DEVICE_DISCONNECTED_C) {
-                Serial.println("Disconnected or error.");
+                len += snprintf(buffer + len, sizeof(buffer) - len, "Disconnected or error.\n");
             } else {
-                Serial.print(tempC);
-                Serial.println(" °C");
+                len += snprintf(buffer + len, sizeof(buffer) - len, "%.2f °C (%d cdegC)\n", tempC, static_cast<int16_t>(tempC * 100));
             }
         } else {
-            Serial.printf("[Temperature] Unable to get address for sensor %d\n", i);
+            len += snprintf(buffer + len, sizeof(buffer) - len, "[Temperature] Unable to get address for sensor %d\n", i);
         }
+        if (len >= sizeof(buffer) - 64) { // Flush if buffer is nearly full
+            Serial.print(buffer);
+            len = 0;
+            buffer[0] = '\0';
+        }
+    }
+    if (len > 0) {
+        Serial.print(buffer);
     }
 }
 
@@ -149,23 +169,26 @@ void TemperatureTask(void* parameter) {
         float temperature_mppt_right = probes.getTempC(thermal_probe_mppt_right);
         float temperature_battery_left = probes.getTempC(thermal_probe_battery_left);
         float temperature_battery_right = probes.getTempC(thermal_probe_battery_right);
-        
-        
-        if (temperature_mppt_left != DEVICE_DISCONNECTED_C) {
-            temperature_mppt_left = LinearCorrection(temperature_mppt_left, 1.0f, 0.0f);
+
+        message_t msg;
+        msg.source = DATA_SOURCE_TEMPERATURES; 
+        msg.timestamp.time_since_boot_ms = millis();
+        msg.timestamp.epoch_seconds = get_epoch_seconds();
+        msg.timestamp.epoch_ms = get_epoch_millis();
+
+        auto& temperature = msg.payload.temperature;
+        temperature.battery_left_cdegC = (temperature_battery_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_left * 100);
+        temperature.battery_right_cdegC = (temperature_battery_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_right * 100);
+        temperature.mppt_left_cdegC = (temperature_mppt_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_left * 100);
+        temperature.mppt_right_cdegC = (temperature_mppt_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_right * 100);
+
+        // Send the temperature data to the central broker queue
+        if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(10)) != pdPASS) {
+            Serial.println("[Temperature] Warning: Failed to send temperature data to broker queue.");
         }
 
-        if (temperature_mppt_right != DEVICE_DISCONNECTED_C) {
-            temperature_mppt_right = LinearCorrection(temperature_mppt_right, 1.0f, 0.0f);
-        }
-
-        if (temperature_battery_left != DEVICE_DISCONNECTED_C) {
-            temperature_battery_left = LinearCorrection(temperature_battery_left, 1.0f, 0.0f);
-        }
-
-        PrintDebugTemperature(temperature_mppt_left, temperature_mppt_right, temperature_battery_left);
-
-        vTaskDelay(pdMS_TO_TICKS(500));
+        PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt_left, temperature_mppt_right);
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 
