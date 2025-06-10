@@ -5,6 +5,7 @@
 #include "AsyncElegantOTA.h" // Over the air updates for the ESP32.
 #include "ESPmDNS.h" // Required for mDNS service discovery.
 #include "Utilities.hpp" // Custom utility macros and functions.
+#include "time_manager.h" // Header file for time management tasks.
 
 static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
     
@@ -59,6 +60,7 @@ void WifiTask(void* parameter) {
                 if (LedBlinkerTaskHandle != nullptr) {
                     xTaskNotify(LedBlinkerTaskHandle, BlinkRate::Slow, eSetValueWithOverwrite);
                 }
+                xEventGroupSetBits(system_event_group, BIT_WIFI_CONNECTED); //Signalize that WiFi is connected for time manager
                 break;
             }
         }
@@ -98,7 +100,7 @@ void ServerTask(void* parameter) {
     });
 
     server.on("/instrumentation", HTTP_GET, [](AsyncWebServerRequest *request) {
-        // Send system instrumentation data from singleton class
+        /* 
         float voltage_battery = SystemData::getInstance().all_info.battery_voltage;
         float current_motor_left = SystemData::getInstance().all_info.motor_current_left;
         float current_motor_right = SystemData::getInstance().all_info.motor_current_right;
@@ -127,8 +129,9 @@ void ServerTask(void* parameter) {
         response += "<p>RPM Right: " + String(rpm_right) + "</p>";
         response += "<p>Irradiance: " + String(irradiance) + "</p>"; 
         response += "<p>Timestamp: " + String(timestamp) + "</p>";
+        */
 
-        request->send(200, "text/html", response);
+        //request->send(200, "text/html", response);
     });
 
     while (WiFi.status() != WL_CONNECTED) {
@@ -142,8 +145,8 @@ void ServerTask(void* parameter) {
     server.begin();
 
     while (true) {
-        String line_protocol = SystemData::getInstance().GetLineProtocol();
-        DEBUG_PRINTF("\n[HTTP]]Sending Data: \n%s\n", line_protocol.c_str());
+        //String line_protocol = SystemData::getInstance().GetLineProtocol();
+        //DEBUG_PRINTF("\n[HTTP]]Sending Data: \n%s\n", line_protocol.c_str());
         vTaskDelay(2000);
     }
 }

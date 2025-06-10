@@ -1,7 +1,12 @@
 #include <Arduino.h> // Main Arduino library, required for projects that use the Arduino framework.
 #include "TinyGPSPlus.h" // GPS NMEA sentence parser.
-#include "arariboat/mavlink.h" // Custom mavlink dialect for the boat generated using Mavgen tool.
 #include "Utilities.hpp" // Custom utility macros and functions.
+#include "time_manager.h" // Header file for time management tasks.
+
+
+static TinyGPSPlus gps; // Object that parses NMEA sentences from the NEO-6M GPS module
+static bool time_was_set_by_gps = false; // Flag to check if the time was set by GPS
+
 
 static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
     
@@ -47,13 +52,46 @@ static void PrintPosition(float latitude, float longitude, int interval) {
     DEBUG_PRINTF("\n[GPS]Latitude: %f, Longitude: %f\n", latitude, longitude);
 }
 
+// Function to check if the GPS time is valid and set the system time accordingly
+static void check_time_synchronization() {
+
+    if (time_was_set_by_gps) {
+        // If the time was already set by GPS, no need to check again
+        return;
+    }
+
+    if (gps.date.isValid() && gps.time.isValid()) {
+        //Check if another source (like NTP) has already set the time
+        EventBits_t current_bits = xEventGroupGetBits(system_event_group);  
+        if ((current_bits & BIT_TIME_SYNC_SUCCESS) == 0) {
+            Serial.printf("[GPS]Setting system time from GPS: %02d/%02d/%04d %02d:%02d:%02d\n", 
+            gps.date.day(), gps.date.month(), gps.date.year(),
+            gps.time.hour(), gps.time.minute(), gps.time.second());
+        
+            tm timeinfo;
+            timeinfo.tm_year = gps.date.year() - 1900; // tm_year is years since 1900
+            timeinfo.tm_mon = gps.date.month() - 1; // tm_mon is 0-11
+            timeinfo.tm_mday = gps.date.day();
+            timeinfo.tm_hour = gps.time.hour();
+            timeinfo.tm_min = gps.time.minute();
+            timeinfo.tm_sec = gps.time.second();
+
+            RTC.setTimeStruct(timeinfo); // Set the time in the RTC
+            time_was_set_by_gps = true; // Set the flag to true to avoid setting the time again
+
+            // Set the event bit to indicate time sync success
+            xEventGroupSetBits(system_event_group, BIT_TIME_SYNC_SUCCESS);
+            Serial.printf("[GPS]System time set successfully.\n");    
+        }             
+    }
+}
+
 void GPSTask(void* parameter) {
 
     // Example of latitude: 40.741895 (north is positive)
     // Example of longitude: -73.989308 (west is negative)
     // The fifth decimal place is worth up to 1.1 m. The sixth decimal place is worth up to 11cm. And so forth.
     
-    TinyGPSPlus gps; // Object that parses NMEA sentences from the NEO-6M GPS module
     constexpr uint8_t pin_gps_rx = PIN_GPS_RX;  
     constexpr uint8_t pin_gps_tx = PIN_GPS_TX; 
     constexpr int32_t baud_rate = 9600; // Fixed baud rate used by NEO-6M GPS module
@@ -75,11 +113,10 @@ void GPSTask(void* parameter) {
                     longitude = gps.location.lng();
                     PrintPosition(latitude, longitude, SECONDS(10));
                 }
-                
-                SystemData::getInstance().all_info.latitude = latitude;
-                SystemData::getInstance().all_info.longitude = longitude;
-            }
-        }           
-        vTaskDelay(pdMS_TO_TICKS(500));
+
+                check_time_synchronization();
+            }           
+            vTaskDelay(pdMS_TO_TICKS(50)); // Allow other tasks to run
+        }
     }
 }
