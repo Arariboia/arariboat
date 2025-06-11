@@ -5,7 +5,10 @@
 #include "Utilities.hpp"          // Assuming LinearCorrection, STRINGS_ARE_EQUAL, DEBUG_PRINTF
 #include "arariboat/mavlink.h"
 #include "data_instrumentation.h"
+#include "data.hpp"
 #include "INA226.h"
+#include "time_manager.h"
+#include "queues.hpp"
 
 typedef Adafruit_ADS1115 ADS1115; //Shorter alias for the ADS1115 class from Adafruit library
 
@@ -20,6 +23,9 @@ constexpr uint8_t aux_battery_ina226_address = 0x40;
 constexpr uint8_t currents_board_eeprom_address = 0x50;
 constexpr uint8_t voltages_board_eeprom_address = 0x51;
 
+//Time to post data to the system queue
+int time_to_post_data_ms = 500; // 500ms for instrumentation data posting
+int instrumentation_debug_print_interval_ms = 1000; //Interval between serial prints
 
 // --- Generic Calibration Data Management ---
 struct __attribute__((packed)) LinearCalibration {
@@ -40,7 +46,7 @@ struct __attribute__((packed)) BoardCalibrationData {
 
 // Global instances for loaded calibrations for each board
 BoardCalibrationData currents_board_cal_data;
-BoardCalibrationData voltages_board_cal_data; // For the second board, e.g., irradiance
+BoardCalibrationData voltages_board_cal_data; 
 
 // --- Default Calibration Values ---
 // LSB for ADS1115 at GAIN_ONE (±4.096V range / 32767 counts)
@@ -48,7 +54,8 @@ const float ADC_LSB_VOLTS_GAIN_ONE = 4.096f / 32767.0f; // Approx. 0.00012500381
 
 // Default for "Currents" Board (using all 4 pairs)
 const BoardCalibrationData DEFAULT_CURRENTS_BOARD_CAL = {
-    CALIBRATION_DATA_VERSION, CALIBRATION_VALID_MARKER,
+    CALIBRATION_DATA_VERSION, 
+    CALIBRATION_VALID_MARKER,
     {
         {0.013063f, -227.935685f},  // Channel 0: Battery Current
         {0.004162f, -54.649315f},   // Channel 1: Motor Left Current
@@ -57,19 +64,30 @@ const BoardCalibrationData DEFAULT_CURRENTS_BOARD_CAL = {
     }
 };
 
-// Default for "Voltages" Board (e.g., Irradiance on Channel 0)
+// Default for "Voltages" Board
 // Irradiance: (RawADC * LSB_V * 1000 / Sensitivity_V_1000W)
 // Sensitivity_V_1000W = 22.4mV / 1000 = 0.0224V
 // Slope = (ADC_LSB_VOLTS_GAIN_ONE * 1000.0f) / 0.0224f
 const float DEFAULT_IRRADIANCE_SLOPE = (ADC_LSB_VOLTS_GAIN_ONE * 1000.0f) / 0.0224f; // Approx 5.580527f
 
+//Main battery voltage
+const float DEFAULT_MAIN_BATTERY_VOLTAGE_SLOPE = 1.0f; // 1:1 slope for main battery voltage (no correction)
+const float DEFAULT_MAIN_BATTERY_VOLTAGE_INTERCEPT = 0.0f; // No offset for main battery voltage
+
+// Pump currents (left and right) are assumed to be 1:1 for simplicity
+const float DEFAULT_PUMP_LEFT_SLOPE = 1.0f; // 1:1 slope for left pump current
+const float DEFAULT_PUMP_LEFT_INTERCEPT = 0.0f; // No offset for left pump current
+const float DEFAULT_PUMP_RIGHT_SLOPE = 1.0f; // 1:1 slope for right pump current
+const float DEFAULT_PUMP_RIGHT_INTERCEPT = 0.0f; // No offset for right pump current
+
 const BoardCalibrationData DEFAULT_VOLTAGES_BOARD_CAL = {
-    CALIBRATION_DATA_VERSION, CALIBRATION_VALID_MARKER,
+    CALIBRATION_DATA_VERSION, 
+    CALIBRATION_VALID_MARKER,
     {
-        {DEFAULT_IRRADIANCE_SLOPE, 0.0f}, // Channel 0: Irradiance (W/m^2 from raw ADC)
-        {0.0f, 0.0f},                     // Channel 1: Unused/Default
-        {0.0f, 0.0f},                     // Channel 2: Unused/Default
-        {0.0f, 0.0f}                      // Channel 3: Unused/Default
+        {DEFAULT_IRRADIANCE_SLOPE, 0.0f},                                             // Channel 0
+        {DEFAULT_PUMP_LEFT_SLOPE, DEFAULT_PUMP_LEFT_INTERCEPT},                       // Channel 1
+        {DEFAULT_PUMP_RIGHT_SLOPE, DEFAULT_PUMP_RIGHT_INTERCEPT},                     // Channel 2
+        {DEFAULT_MAIN_BATTERY_VOLTAGE_SLOPE, DEFAULT_MAIN_BATTERY_VOLTAGE_INTERCEPT}  // Channel 3
     }
 };
 
@@ -199,6 +217,37 @@ bool i2c_scan() { // ... remains the same ...
     return device_found;
 }
 
+class LowPassIIR {
+public:
+    LowPassIIR(float alpha) : _alpha(alpha), _last_output(0.0f) {
+        if (alpha < 0.0f || alpha > 1.0f) {
+            DEBUG_PRINTF("[ERROR] LowPassIIR: Alpha must be between 0.0 and 1.0, got %.2f\n", alpha);
+            _alpha = 0.5f; // Default to a safe value
+        }
+    }
+
+    //Process a single input sample through the IIR filter and return the filtered output
+    float filter(float input) {
+        _last_output = _alpha * input + (1.0f - _alpha) * _last_output;
+        return _last_output;
+    }
+
+    // Get the last output value (useful for debugging or further processing)
+    float value() const {
+        return _last_output;
+    }
+
+    // Reset the filter state
+    void reset() {
+        _last_output = 0.0f; // Reset last output to zero
+    }
+
+private:
+    float _alpha;          // Smoothing factor (0.0 to 1.0)
+    float _last_output;    // Last output value
+
+};
+
 void InstrumentationTask(void* parameter) {
     
     constexpr gpio_num_t i2c_scl = GPIO_NUM_19;
@@ -214,14 +263,27 @@ void InstrumentationTask(void* parameter) {
     bool is_currents_cal_loaded = false;
     bool is_voltages_cal_loaded = false;
     bool is_aux_battery_monitor_initialized = false; // Flag for INA226
-    
-    // For ESP-IDF event loop, handler_args might need to be a struct containing pointers to ADCs and cal_loaded flags
-    // For simplicity, if commandCallback is called directly from Serial, pass &currentsAdc.
-    // esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &currentsAdc);
 
+
+    float filter_alpha = 0.7f; // Smoothing factor. Percentage of previous data to use for smoothing (0.0 to 1.0)
+
+    // Current board measurements
+    LowPassIIR battery_current     (filter_alpha); 
+    LowPassIIR current_motor_left  (filter_alpha); 
+    LowPassIIR current_motor_right (filter_alpha); 
+    LowPassIIR current_mppt        (filter_alpha); 
+
+    // Voltage board measurements
+    LowPassIIR irradiance           (filter_alpha);
+    LowPassIIR pump_left_voltage    (filter_alpha);
+    LowPassIIR pump_right_voltage   (filter_alpha);
+    LowPassIIR main_battery_voltage (filter_alpha);
     DEBUG_PRINTF("[Instrumentation] Starting main measurement loop.\n");
 
     while (true) {
+        
+        vTaskDelay(pdMS_TO_TICKS(20)); // Short delay to allow other tasks to run
+
         char instrumentation_debug_buffer[768]; // Increased buffer size for more data
         memset(instrumentation_debug_buffer, 0, sizeof(instrumentation_debug_buffer));
         size_t buffer_current_len = 0;
@@ -283,19 +345,39 @@ void InstrumentationTask(void* parameter) {
 
         // --- Perform measurements and build output string ---
         if (is_currents_adc_initialized && is_currents_cal_loaded) {
-            // Assuming channel 0-3 for battery, motor L, motor R, MPPT current respectively
-            float battery_current     = LinearCorrection(currentsAdc.readADC_SingleEnded(0), currents_board_cal_data.calibrations[0].slope, currents_board_cal_data.calibrations[0].intercept);
-            float current_motor_left  = LinearCorrection(currentsAdc.readADC_SingleEnded(1), currents_board_cal_data.calibrations[1].slope, currents_board_cal_data.calibrations[1].intercept);
-            float current_motor_right = LinearCorrection(currentsAdc.readADC_SingleEnded(2), currents_board_cal_data.calibrations[2].slope, currents_board_cal_data.calibrations[2].intercept);
-            float current_mppt        = LinearCorrection(currentsAdc.readADC_SingleEnded(3), currents_board_cal_data.calibrations[3].slope, currents_board_cal_data.calibrations[3].intercept);
 
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len, 
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Currents ADC 0x%X | EEPROM 0x%X]\n"
-                                           "  Batt: %.2fA, MotL: %.2fA, MotR: %.2fA, MPPT: %.2fA\n",
-                                           (buffer_current_len == 0) ? "" : "\n", // Add newline if not first entry
-                                           currents_adc_address, currents_board_eeprom_address,
-                                           battery_current, current_motor_left, current_motor_right, current_mppt);
+            int16_t raw_adc_battery_current = currentsAdc.readADC_SingleEnded(0);
+            int16_t raw_adc_motor_left_current = currentsAdc.readADC_SingleEnded(1);
+            int16_t raw_adc_motor_right_current = currentsAdc.readADC_SingleEnded(2);
+            int16_t raw_adc_mppt_current = currentsAdc.readADC_SingleEnded(3);
+
+            float battery_current_sample     = LinearCorrection(raw_adc_battery_current, currents_board_cal_data.calibrations[0].slope, currents_board_cal_data.calibrations[0].intercept);
+            float current_motor_left_sample  = LinearCorrection(raw_adc_motor_left_current, currents_board_cal_data.calibrations[1].slope, currents_board_cal_data.calibrations[1].intercept);
+            float current_motor_right_sample = LinearCorrection(raw_adc_motor_right_current, currents_board_cal_data.calibrations[2].slope, currents_board_cal_data.calibrations[2].intercept);
+            float current_mppt_sample        = LinearCorrection(raw_adc_mppt_current, currents_board_cal_data.calibrations[3].slope, currents_board_cal_data.calibrations[3].intercept);
+
+            // Apply low-pass IIR filtering to smooth the readings
+            battery_current.filter(battery_current_sample);
+            current_motor_left.filter(current_motor_left_sample);
+            current_motor_right.filter(current_motor_right_sample);
+            current_mppt.filter(current_mppt_sample);
+
+            buffer_current_len += snprintf(
+                instrumentation_debug_buffer + buffer_current_len,
+                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                "%s[Currents ADC 0x%X | EEPROM 0x%X]\n"
+                "  Battery Current:     %.2f A (RawADC: %d)\n"
+                "  Motor Left Current:  %.2f A (RawADC: %d)\n"
+                "  Motor Right Current: %.2f A (RawADC: %d)\n"
+                "  MPPT Current:        %.2f A (RawADC: %d)\n",
+                (buffer_current_len == 0) ? "" : "\n",
+                currents_adc_address, currents_board_eeprom_address,
+                battery_current.value(),     raw_adc_battery_current,
+                current_motor_left.value(),  raw_adc_motor_left_current,
+                current_motor_right.value(), raw_adc_motor_right_current,
+                current_mppt.value(),        raw_adc_mppt_current
+            );
+
         } else {
             buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
                                            sizeof(instrumentation_debug_buffer) - buffer_current_len,
@@ -305,24 +387,41 @@ void InstrumentationTask(void* parameter) {
         }
 
         if (is_voltages_adc_initialized && is_voltages_cal_loaded) {
-            // Assuming Channel 0 of voltagesAdc is for irradiance sensor
-            int16_t raw_adc_irradiance_ch = voltagesAdc.readADC_SingleEnded(0);
-            // Apply generic LinearCorrection for irradiance
-            float irradiance = LinearCorrection(raw_adc_irradiance_ch, 
-                                                voltages_board_cal_data.calibrations[0].slope, 
-                                                voltages_board_cal_data.calibrations[0].intercept);
-            
-            // For debugging, calculate and show the intermediate voltage if desired
-            float irradiance_sensor_voltage_V = voltagesAdc.computeVolts(raw_adc_irradiance_ch);
 
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
-                                           "  Irradiance: %.0f W/m^2 (RawADC: %d, Sensor V: %.3fV)\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           voltages_adc_address, voltages_board_eeprom_address,
-                                           irradiance, raw_adc_irradiance_ch, irradiance_sensor_voltage_V);
-            // You can add readings for calibrations[1] through [3] from voltagesAdc if they are used for other sensors.
+            int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(0);
+            int16_t raw_adc_pump_left_voltage = voltagesAdc.readADC_SingleEnded(1);
+            int16_t raw_adc_pump_right_voltage = voltagesAdc.readADC_SingleEnded(2);
+            int16_t raw_adc_main_battery_voltage = voltagesAdc.readADC_SingleEnded(3);
+
+            // Convert raw ADC readings to calibrated values using the loaded calibration data
+            float irradiance_sample = LinearCorrection(raw_adc_irradiance, voltages_board_cal_data.calibrations[0].slope, voltages_board_cal_data.calibrations[0].intercept);
+            float pump_left_voltage_sample = LinearCorrection(raw_adc_pump_left_voltage, voltages_board_cal_data.calibrations[1].slope, voltages_board_cal_data.calibrations[1].intercept);              
+            float pump_right_voltage_sample = LinearCorrection(raw_adc_pump_right_voltage, voltages_board_cal_data.calibrations[2].slope, voltages_board_cal_data.calibrations[2].intercept);                                                                                              
+            float main_battery_voltage_sample = LinearCorrection(raw_adc_main_battery_voltage, voltages_board_cal_data.calibrations[3].slope, voltages_board_cal_data.calibrations[3].intercept);
+                                                                                  
+            // Apply low-pass IIR filtering to smooth the irradiance reading
+            irradiance.filter(irradiance_sample);
+            pump_left_voltage.filter(pump_left_voltage_sample);
+            pump_right_voltage.filter(pump_right_voltage_sample);
+            main_battery_voltage.filter(main_battery_voltage_sample);
+            
+            buffer_current_len += snprintf(
+                instrumentation_debug_buffer + buffer_current_len,
+                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
+                "  Irradiance: %.0f W/m^2 (RawADC: %d)\n"
+                "  Pump Left Voltage: %.2f V (RawADC: %d)\n"
+                "  Pump Right Voltage: %.2f V (RawADC: %d)\n"
+                "  Main Battery Voltage: %.2f V (RawADC: %d)\n",
+                (buffer_current_len == 0) ? "" : "\n",
+                voltages_adc_address, voltages_board_eeprom_address,
+                irradiance.value(), raw_adc_irradiance,
+                pump_left_voltage.value(), raw_adc_pump_left_voltage,
+                pump_right_voltage.value(), raw_adc_pump_right_voltage,
+                main_battery_voltage.value(), raw_adc_main_battery_voltage
+            );
+
+
         } else {
             buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
                                            sizeof(instrumentation_debug_buffer) - buffer_current_len,
@@ -353,11 +452,48 @@ void InstrumentationTask(void* parameter) {
                                            (buffer_current_len == 0) ? "" : "\n",
                                            aux_battery_ina226_address);
         }
-        
-        if (buffer_current_len > 0 && (buffer_current_len < sizeof(instrumentation_debug_buffer))) {
-            DEBUG_PRINTF("\n--- Instrumentation Tick ---\n%s--- End Tick ---\n", instrumentation_debug_buffer);
+
+        // --- Print the accumulated debug information ---
+        static unsigned long last_print_time = 0;
+        if (millis() - last_print_time > instrumentation_debug_print_interval_ms) {
+            last_print_time = millis(); // Update last print time
+            if (buffer_current_len > 0) {
+                if (!EndsWithNewline(instrumentation_debug_buffer)) {
+                    instrumentation_debug_buffer[buffer_current_len++] = '\n'; // Ensure it ends with a newline
+                    instrumentation_debug_buffer[buffer_current_len] = '\0'; // Null-terminate the string
+                }
+                Serial.print(instrumentation_debug_buffer); // Print all accumulated data at once
+            } else {
+                Serial.println("[Instrumentation] No data to report this cycle.");
+            }
         }
-        
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Consolidated delay for the main loop (was 500ms)
+
+        static unsigned long last_post_time_ms = 0;
+        if (millis() - last_post_time_ms < time_to_post_data_ms) {
+            continue; // Skip posting if not enough time has passed
+        }
+        last_post_time_ms = millis(); // Update last post time
+
+        //Pass data to queues
+        message_t msg;
+        msg.source = DATA_SOURCE_INSTRUMENTATION;
+        auto& data = msg.payload.instrumentation;
+        data.battery_current_cA = static_cast<int16_t>(battery_current.value() * 100.0f); // Convert to centiAmperes
+        data.motor_current_left_cA = static_cast<int16_t>(current_motor_left.value() * 100.0f); // Convert to centiAmperes
+        data.motor_current_right_cA = static_cast<int16_t>(current_motor_right.value() * 100.0f); // Convert to centiAmperes
+        data.mppt_current_cA = static_cast<int16_t>(current_mppt.value() * 100.0f); // Convert to centiAmperes
+        data.battery_voltage_cV = static_cast<uint16_t>(main_battery_voltage.value() * 100.0f); // Convert to centiVolts
+        data.auxiliary_battery_voltage_cV = static_cast<uint16_t>(aux_battery_monitor.getBusVoltage() * 100.0f); // Convert to centiVolts
+        data.irradiance = static_cast<uint16_t>(irradiance.value()); // Convert to W/m^2
+        data.timestamp_ms = millis(); // Timestamp in milliseconds
+
+        msg.timestamp.epoch_ms = get_epoch_seconds();
+        msg.timestamp.epoch_ms = get_epoch_millis();
+        msg.timestamp.time_since_boot_ms = data.timestamp_ms;
+
+        // Send the message to the broker
+        if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(20)) != pdTRUE) {
+            DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
+        } 
     }
 }
