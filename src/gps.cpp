@@ -2,10 +2,15 @@
 #include "TinyGPSPlus.h" // GPS NMEA sentence parser.
 #include "Utilities.hpp" // Custom utility macros and functions.
 #include "time_manager.h" // Header file for time management tasks.
+#include "data_gps.h" // Header file for GPS data structure.
+#include "data.hpp" // Header file for data structures.
+#include "queues.hpp" // Header file for queue initialization and definitions.
 
 
 static TinyGPSPlus gps; // Object that parses NMEA sentences from the NEO-6M GPS module
 static bool time_was_set_by_gps = false; // Flag to check if the time was set by GPS
+
+const int queue_post_interval_ms = 500;
 
 
 static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
@@ -101,22 +106,72 @@ void GPSTask(void* parameter) {
     esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &gps); 
 
     while (true) {
+
+        if (!Serial2.available()) {
+            // If no data is available, we can skip the rest of the loop
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
         while (Serial2.available()) {
-            // Reads the serial stream from the NEO-6M GPS module and parses it into TinyGPSPlus object if a valid NMEA sentence is received
-            if (gps.encode(Serial2.read())) { 
-                constexpr float invalid_value = -1.0f; // Begin the fields with arbitrated invalid value and update them if the gps data is valid.
-                float latitude = invalid_value;
-                float longitude = invalid_value;
+            if (gps.encode(Serial2.read())) {
+                break; // Break if a complete sentence is parsed
+            }
+        }
 
-                if (gps.location.isValid()) {
-                    latitude = gps.location.lat();
-                    longitude = gps.location.lng();
-                    PrintPosition(latitude, longitude, SECONDS(10));
-                }
+        check_time_synchronization();
 
-                check_time_synchronization();
-            }           
-            vTaskDelay(pdMS_TO_TICKS(50)); // Allow other tasks to run
+        gps_data_t gps_data = {0};
+        char buffer[256];
+        int len = 0;
+
+        if (gps.location.isValid()) {
+            gps_data.latitude_degE7 = static_cast<int32_t>(gps.location.lat() * 1e7);
+            gps_data.longitude_degE7 = static_cast<int32_t>(gps.location.lng() * 1e7);
+            len += snprintf(buffer + len, sizeof(buffer) - len,
+                "[GPS]Latitude: %d, Longitude: %d\n", gps_data.latitude_degE7, gps_data.longitude_degE7);
+        }
+
+        if (gps.speed.isValid()) {
+            gps_data.speed_cm_s = static_cast<uint16_t>(gps.speed.kmph() * (100000.0f / 3600.0f));
+            len += snprintf(buffer + len, sizeof(buffer) - len,
+                "[GPS]Speed: %d cm/s\n", gps_data.speed_cm_s);
+        }
+
+        if (gps.course.isValid()) {
+            gps_data.course = static_cast<uint8_t>(gps.course.deg());
+            len += snprintf(buffer + len, sizeof(buffer) - len,
+                "[GPS]Course: %d\n", gps_data.course);
+        }
+
+        if (gps.satellites.isValid()) {
+            gps_data.satellites_visible = static_cast<uint8_t>(gps.satellites.value());
+            len += snprintf(buffer + len, sizeof(buffer) - len,
+                "[GPS]Satellites: %d\n", gps_data.satellites_visible);
+        }
+
+        if (gps.hdop.isValid()) {
+            gps_data.hdop_deciunits = static_cast<uint8_t>(gps.hdop.hdop() * 10.0f);
+            len += snprintf(buffer + len, sizeof(buffer) - len,
+                "[GPS]HDOP: %d\n", gps_data.hdop_deciunits);
+        }
+
+        Serial.print(buffer);
+
+        static unsigned long last_post_time = 0;
+        if (millis() - last_post_time < queue_post_interval_ms) {
+            continue;
+        }
+
+        message_t msg;
+        msg.source = DATA_SOURCE_GPS;
+        msg.payload.gps = gps_data;
+        msg.timestamp.time_since_boot_ms = millis();
+        msg.timestamp.epoch_seconds = get_epoch_seconds();
+        msg.timestamp.epoch_ms = get_epoch_millis();
+
+        if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(20)) != pdTRUE) {
+            Serial.println("[GPS]Error: Queue is full)");
         }
     }
 }

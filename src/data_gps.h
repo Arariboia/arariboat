@@ -9,5 +9,4 @@ typedef struct {
     uint8_t heading; //Direction of the bow in degrees (0-360)
     uint8_t satellites_visible; // Number of satellites visible
     uint8_t hdop_deciunits; // Indicates quality of GPS constellation, values below 5 are good, above 10 are poor. Values are scaled by 10 (e.g 5.0 = 50, 1.0 = 10, etc.)
-    uint32_t timestamp_ms; // Timestamp in milliseconds since boot
 } gps_data_t;
