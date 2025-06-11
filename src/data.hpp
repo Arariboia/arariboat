@@ -25,6 +25,17 @@ typedef enum {
     DATA_SOURCE_TEMPERATURES 
 } data_source_t;
 
+//This must be kept in sync and in the same order as the data_source_t enum
+const char* const DATA_SOURCE_NAMES[] = {
+    "BMS",
+    "Motor Left",
+    "Motor Right",
+    "GPS",
+    "MPPT",
+    "Instrumentation",
+    "Temperatures"
+};
+
 typedef struct {
     data_source_t source;
     union {

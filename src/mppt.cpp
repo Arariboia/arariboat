@@ -178,8 +178,8 @@ void mppt_task(void *parameters) {
             const mppt_data_t& data = mppt.getData();
 
             // Check if data is recent. If the controller is offline, the timestamp stops updating.
-            // We'll consider data stale if it's older than 3 polling cycles.
-            if (data.timestamp_ms > 0 && (millis() - data.timestamp_ms < (POLL_INTERVAL_MS * 3))) {
+            // We'll consider data stale if it's older than a given number of polling cycles.
+            if (data.timestamp_ms > 0 && (millis() - data.timestamp_ms < (POLL_INTERVAL_MS * 5))) {
                 Serial.println(); // Add a blank line for readability
                 // Call the "on-demand" conversion and printing methods
                 mppt.printHumanReadableElectricalData();
@@ -195,10 +195,8 @@ void mppt_task(void *parameters) {
                 msg.timestamp.epoch_ms = get_epoch_millis(); // Get the current epoch milliseconds 
 
                 // Send the message to the queue
-                if (xQueueSend(broker_queue, &msg, 0) != pdTRUE) {
+                if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(20)) != pdTRUE) {
                     Serial.println("[MPPT]Error:Queue is full!");
-                } else {
-                    Serial.println("[MPPT] MPPT data sent to queue successfully.");
                 }
             } else {
                 Serial.println("[MPPT] Waiting for data from MPPT controller...");

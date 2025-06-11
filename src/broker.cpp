@@ -15,7 +15,7 @@ void broker_task(void* parameter) {
             // --- Delegation Logic ---
             // Here, you can add rules about where to send messages.
             
-            Serial.printf("[broker_task] Received message from source: %d\n", received_message.source);
+            Serial.printf("[broker_task] Received message from source: %s\n", DATA_SOURCE_NAMES[received_message.source]);
             
             // 1. Send to the Logger Task
             if (logger_queue != NULL) {
