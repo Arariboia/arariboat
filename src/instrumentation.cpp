@@ -15,6 +15,7 @@ typedef Adafruit_ADS1115 ADS1115; //Shorter alias for the ADS1115 class from Ada
 // ADC I2C Addresses
 constexpr uint8_t currents_adc_address = 0x48;
 constexpr uint8_t voltages_adc_address = 0x49;
+constexpr uint8_t propulsion_adc_address = 0x4B;
 
 // INA226 I2C Address for Auxiliary Battery
 constexpr uint8_t aux_battery_ina226_address = 0x40;
@@ -47,6 +48,7 @@ struct __attribute__((packed)) BoardCalibrationData {
 // Global instances for loaded calibrations for each board
 BoardCalibrationData currents_board_cal_data;
 BoardCalibrationData voltages_board_cal_data; 
+BoardCalibrationData propulsion_board_cal_data; 
 
 // --- Default Calibration Values ---
 // LSB for ADS1115 at GAIN_ONE (±4.096V range / 32767 counts)
@@ -88,6 +90,20 @@ const BoardCalibrationData DEFAULT_VOLTAGES_BOARD_CAL = {
         {DEFAULT_PUMP_LEFT_SLOPE, DEFAULT_PUMP_LEFT_INTERCEPT},                       // Channel 1
         {DEFAULT_PUMP_RIGHT_SLOPE, DEFAULT_PUMP_RIGHT_INTERCEPT},                     // Channel 2
         {DEFAULT_MAIN_BATTERY_VOLTAGE_SLOPE, DEFAULT_MAIN_BATTERY_VOLTAGE_INTERCEPT}  // Channel 3
+    }
+};
+
+constexpr float DEFAULT_NEUTRAL_SLOPE = 1.0f; // 1:1 slope for propulsion board (no correction)
+constexpr float DEFAULT_NEUTRAL_INTERCEPT = 0.0f; // No offset for propulsion board
+
+const BoardCalibrationData DEFAULT_PROPULSION_BOARD_CAL = {
+    CALIBRATION_DATA_VERSION, 
+    CALIBRATION_VALID_MARKER,
+    {
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}, // Channel 0
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}, // Channel 1
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}, // Channel 2
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}  // Channel 3
     }
 };
 
@@ -256,10 +272,12 @@ void InstrumentationTask(void* parameter) {
 
     ADS1115 currentsAdc;
     ADS1115 voltagesAdc;
+    ADS1115 propulsionAdc;
     INA226 aux_battery_monitor(aux_battery_ina226_address); // INA226 for auxiliary battery
     
     bool is_currents_adc_initialized = false;
     bool is_voltages_adc_initialized = false;
+    bool is_propulsion_adc_initialized = false; 
     bool is_currents_cal_loaded = false;
     bool is_voltages_cal_loaded = false;
     bool is_aux_battery_monitor_initialized = false; // Flag for INA226
@@ -328,6 +346,16 @@ void InstrumentationTask(void* parameter) {
                 save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
             } else { DEBUG_PRINTF("[Calibration] Loaded for Voltages Board from EEPROM 0x%X.\n", voltages_board_eeprom_address); }
             is_voltages_cal_loaded = true;
+        }
+
+        // --- PROPULSION ADC ---
+        if (!is_propulsion_adc_initialized) {
+            if (propulsionAdc.begin(propulsion_adc_address)) {
+                DEBUG_PRINTF("\n[ADS]Propulsion ADC (0x%X) successfully initialized.\n", propulsion_adc_address);
+                propulsionAdc.setDataRate(RATE_ADS1115_16SPS);
+                propulsionAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency
+                is_propulsion_adc_initialized = true;
+            } else { DEBUG_PRINTF("\n[ADS]Propulsion ADC (0x%X) init failed.\n", propulsion_adc_address); /* Log failure, non-blocking */ }
         }
 
         // --- AUXILIARY BATTERY MONITOR (INA226) ---
@@ -428,6 +456,44 @@ void InstrumentationTask(void* parameter) {
                                            "%s[Voltages Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
                                            (buffer_current_len == 0) ? "" : "\n",
                                            voltages_adc_address, voltages_board_eeprom_address);
+        }
+
+        // --- PROPULSION ADC ---
+        if (is_propulsion_adc_initialized) {
+            // Read propulsion ADC channels (assuming 4 channels for motors)
+            int16_t backup_potentiometer = propulsionAdc.readADC_SingleEnded(0);
+            int16_t helm_potentiometer = propulsionAdc.readADC_SingleEnded(1);
+            int16_t throttle_left_potentiometer = propulsionAdc.readADC_SingleEnded(2);
+            int16_t throttle_right_potentiometer = propulsionAdc.readADC_SingleEnded(3);
+
+            //Get values directly in Volts without calibration since we assume 1:1 slope and intercept
+            float backup_potentiometer_volts = propulsionAdc.computeVolts(backup_potentiometer);
+            float helm_potentiometer_volts = propulsionAdc.computeVolts(helm_potentiometer);
+            float throttle_left_potentiometer_volts = propulsionAdc.computeVolts(throttle_left_potentiometer);
+            float throttle_right_potentiometer_volts = propulsionAdc.computeVolts(throttle_right_potentiometer);
+
+            buffer_current_len += snprintf(
+                instrumentation_debug_buffer + buffer_current_len,
+                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                "%s[Propulsion ADC 0x%X]\n"
+                "  Backup Potentiometer: %.2f V (RawADC: %d)\n"
+                "  Helm Potentiometer: %.2f V (RawADC: %d)\n"
+                "  Throttle Left Potentiometer: %.2f V (RawADC: %d)\n"
+                "  Throttle Right Potentiometer: %.2f V (RawADC: %d)\n",
+                (buffer_current_len == 0) ? "" : "\n",
+                propulsion_adc_address,
+                backup_potentiometer_volts, backup_potentiometer,
+                helm_potentiometer_volts, helm_potentiometer,
+                throttle_left_potentiometer_volts, throttle_left_potentiometer,
+                throttle_right_potentiometer_volts, throttle_right_potentiometer
+            );
+
+        } else {
+            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                                           "%s[Propulsion Board ADC (0x%X) not ready.]\n",
+                                           (buffer_current_len == 0) ? "" : "\n",
+                                           propulsion_adc_address);
         }
         
         // --- Readings from Auxiliary Battery Monitor (INA226) ---
