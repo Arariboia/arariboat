@@ -32,16 +32,19 @@
 #define PRIORITY(x) (x)
 
 
-extern void LedBlinkerTask(void* parameter);
-extern void WifiTask(void* parameter);
-extern void ServerTask(void* parameter);
-extern void SerialTask(void* parameter);
-extern void TemperatureTask(void* parameter);
-extern void GPSTask(void* parameter);
-extern void InstrumentationTask(void* parameter);
-extern void time_manager_task(void* parameter);
-extern void mppt_task(void *parameters);
-extern void broker_task(void* parameter);
+void led_manager_task(void* parameter);
+void WifiTask(void* parameter);
+void ServerTask(void* parameter);
+void SerialTask(void* parameter);
+void TemperatureTask(void* parameter);
+void GPSTask(void* parameter);
+void InstrumentationTask(void* parameter);
+void time_manager_task(void* parameter);
+void mppt_task(void *parameters);
+void broker_task(void* parameter);
+void led_manager_task(void* parameter);
+void can_task(void* parameter);
+
 
 // Declare a handle for each task to allow manipulation of the task from other tasks, such as sending notifications, resuming or suspending.
 // The handle is initialized to nullptr to avoid the task being created before the setup() function.
