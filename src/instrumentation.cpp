@@ -25,8 +25,8 @@ constexpr uint8_t currents_board_eeprom_address = 0x50;
 constexpr uint8_t voltages_board_eeprom_address = 0x51;
 
 //Time to post data to the system queue
-int time_to_post_data_ms = 500; // 500ms for instrumentation data posting
-int instrumentation_debug_print_interval_ms = 1000; //Interval between serial prints
+int time_to_post_data_ms = 250; //for instrumentation data posting
+int instrumentation_debug_print_interval_ms = 500; //Interval between serial prints
 
 // --- Generic Calibration Data Management ---
 struct __attribute__((packed)) LinearCalibration {
@@ -296,6 +296,13 @@ void InstrumentationTask(void* parameter) {
     LowPassIIR pump_left_voltage    (filter_alpha);
     LowPassIIR pump_right_voltage   (filter_alpha);
     LowPassIIR main_battery_voltage (filter_alpha);
+
+    // Propulsion board measurements
+    LowPassIIR backup_potentiometer             (filter_alpha);
+    LowPassIIR helm_potentiometer               (filter_alpha);
+    LowPassIIR throttle_left_potentiometer      (filter_alpha);
+    LowPassIIR throttle_right_potentiometer     (filter_alpha);
+
     DEBUG_PRINTF("[Instrumentation] Starting main measurement loop.\n");
 
     while (true) {
@@ -306,47 +313,47 @@ void InstrumentationTask(void* parameter) {
         memset(instrumentation_debug_buffer, 0, sizeof(instrumentation_debug_buffer));
         size_t buffer_current_len = 0;
 
-        // --- CURRENTS ADC & CALIBRATION ---
-        if (!is_currents_adc_initialized) {
-            if (currentsAdc.begin(currents_adc_address)) {
-                DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) successfully initialized.\n", currents_adc_address);
-                currentsAdc.setDataRate(RATE_ADS1115_16SPS);
-                currentsAdc.setGain(GAIN_ONE); 
-                is_currents_adc_initialized = true;
-            } else { DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) init failed.\n", currents_adc_address); /* Log failure, non-blocking */ }
-        }
+        // // --- CURRENTS ADC & CALIBRATION ---
+        // if (!is_currents_adc_initialized) {
+        //     if (currentsAdc.begin(currents_adc_address)) {
+        //         DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) successfully initialized.\n", currents_adc_address);
+        //         currentsAdc.setDataRate(RATE_ADS1115_16SPS);
+        //         currentsAdc.setGain(GAIN_ONE); 
+        //         is_currents_adc_initialized = true;
+        //     } else { DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) init failed.\n", currents_adc_address); /* Log failure, non-blocking */ }
+        // }
 
-        if (is_currents_adc_initialized && !is_currents_cal_loaded) {
-            DEBUG_PRINTF("[Calibration] Loading for Currents Board (EEPROM 0x%X).\n", currents_board_eeprom_address);
-            load_struct_from_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-            if (currents_board_cal_data.isValidFlag != CALIBRATION_VALID_MARKER || currents_board_cal_data.version != CALIBRATION_DATA_VERSION) {
-                DEBUG_PRINTF("[Calibration] Invalid/outdated for Currents Board. Loading defaults & saving to EEPROM 0x%X.\n", currents_board_eeprom_address);
-                initialize_default_calibrations_for_board(currents_board_cal_data, true); // True for currents board
-                save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-            } else { DEBUG_PRINTF("[Calibration] Loaded for Currents Board from EEPROM 0x%X.\n", currents_board_eeprom_address); }
-            is_currents_cal_loaded = true;
-        }
+        // if (is_currents_adc_initialized && !is_currents_cal_loaded) {
+        //     DEBUG_PRINTF("[Calibration] Loading for Currents Board (EEPROM 0x%X).\n", currents_board_eeprom_address);
+        //     load_struct_from_eeprom(currents_board_cal_data, currents_board_eeprom_address);
+        //     if (currents_board_cal_data.isValidFlag != CALIBRATION_VALID_MARKER || currents_board_cal_data.version != CALIBRATION_DATA_VERSION) {
+        //         DEBUG_PRINTF("[Calibration] Invalid/outdated for Currents Board. Loading defaults & saving to EEPROM 0x%X.\n", currents_board_eeprom_address);
+        //         initialize_default_calibrations_for_board(currents_board_cal_data, true); // True for currents board
+        //         save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
+        //     } else { DEBUG_PRINTF("[Calibration] Loaded for Currents Board from EEPROM 0x%X.\n", currents_board_eeprom_address); }
+        //     is_currents_cal_loaded = true;
+        // }
 
-        // --- VOLTAGES ADC & CALIBRATION ---
-        if (!is_voltages_adc_initialized) {
-            if (voltagesAdc.begin(voltages_adc_address)) {
-                DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) successfully initialized.\n", voltages_adc_address);
-                voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
-                voltagesAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency with irradiance cal
-                is_voltages_adc_initialized = true;
-            } else { DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) init failed.\n", voltages_adc_address);/* Log failure, non-blocking */ }
-        }
+        // // --- VOLTAGES ADC & CALIBRATION ---
+        // if (!is_voltages_adc_initialized) {
+        //     if (voltagesAdc.begin(voltages_adc_address)) {
+        //         DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) successfully initialized.\n", voltages_adc_address);
+        //         voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
+        //         voltagesAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency with irradiance cal
+        //         is_voltages_adc_initialized = true;
+        //     } else { DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) init failed.\n", voltages_adc_address);/* Log failure, non-blocking */ }
+        // }
         
-        if (is_voltages_adc_initialized && !is_voltages_cal_loaded) {
-            DEBUG_PRINTF("[Calibration] Loading for Voltages Board (EEPROM 0x%X).\n", voltages_board_eeprom_address);
-            load_struct_from_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
-            if (voltages_board_cal_data.isValidFlag != CALIBRATION_VALID_MARKER || voltages_board_cal_data.version != CALIBRATION_DATA_VERSION) {
-                DEBUG_PRINTF("[Calibration] Invalid/outdated for Voltages Board. Loading defaults & saving to EEPROM 0x%X.\n", voltages_board_eeprom_address);
-                initialize_default_calibrations_for_board(voltages_board_cal_data, false); // False for voltages board
-                save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
-            } else { DEBUG_PRINTF("[Calibration] Loaded for Voltages Board from EEPROM 0x%X.\n", voltages_board_eeprom_address); }
-            is_voltages_cal_loaded = true;
-        }
+        // if (is_voltages_adc_initialized && !is_voltages_cal_loaded) {
+        //     DEBUG_PRINTF("[Calibration] Loading for Voltages Board (EEPROM 0x%X).\n", voltages_board_eeprom_address);
+        //     load_struct_from_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
+        //     if (voltages_board_cal_data.isValidFlag != CALIBRATION_VALID_MARKER || voltages_board_cal_data.version != CALIBRATION_DATA_VERSION) {
+        //         DEBUG_PRINTF("[Calibration] Invalid/outdated for Voltages Board. Loading defaults & saving to EEPROM 0x%X.\n", voltages_board_eeprom_address);
+        //         initialize_default_calibrations_for_board(voltages_board_cal_data, false); // False for voltages board
+        //         save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
+        //     } else { DEBUG_PRINTF("[Calibration] Loaded for Voltages Board from EEPROM 0x%X.\n", voltages_board_eeprom_address); }
+        //     is_voltages_cal_loaded = true;
+        // }
 
         // --- PROPULSION ADC ---
         if (!is_propulsion_adc_initialized) {
@@ -358,120 +365,130 @@ void InstrumentationTask(void* parameter) {
             } else { DEBUG_PRINTF("\n[ADS]Propulsion ADC (0x%X) init failed.\n", propulsion_adc_address); /* Log failure, non-blocking */ }
         }
 
-        // --- AUXILIARY BATTERY MONITOR (INA226) ---
-        if (!is_aux_battery_monitor_initialized) {
-            if (aux_battery_monitor.begin()) { // Address was set in constructor
-                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
-                // Configure INA226 (max current, shunt resistance, normalize LSB)
-                aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
-                is_aux_battery_monitor_initialized = true;
-            } else {
-                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
-                /* Log failure, non-blocking, will retry next loop */
-            }
-        }
+        // // --- AUXILIARY BATTERY MONITOR (INA226) ---
+        // if (!is_aux_battery_monitor_initialized) {
+        //     if (aux_battery_monitor.begin()) { // Address was set in constructor
+        //         DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
+        //         // Configure INA226 (max current, shunt resistance, normalize LSB)
+        //         aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
+        //         is_aux_battery_monitor_initialized = true;
+        //     } else {
+        //         DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
+        //         /* Log failure, non-blocking, will retry next loop */
+        //     }
+        // }
 
-        // --- Perform measurements and build output string ---
-        if (is_currents_adc_initialized && is_currents_cal_loaded) {
+        // // --- Perform measurements and build output string ---
+        // if (is_currents_adc_initialized && is_currents_cal_loaded) {
 
-            int16_t raw_adc_battery_current = currentsAdc.readADC_SingleEnded(0);
-            int16_t raw_adc_motor_left_current = currentsAdc.readADC_SingleEnded(1);
-            int16_t raw_adc_motor_right_current = currentsAdc.readADC_SingleEnded(2);
-            int16_t raw_adc_mppt_current = currentsAdc.readADC_SingleEnded(3);
+        //     int16_t raw_adc_battery_current = currentsAdc.readADC_SingleEnded(0);
+        //     int16_t raw_adc_motor_left_current = currentsAdc.readADC_SingleEnded(1);
+        //     int16_t raw_adc_motor_right_current = currentsAdc.readADC_SingleEnded(2);
+        //     int16_t raw_adc_mppt_current = currentsAdc.readADC_SingleEnded(3);
 
-            float battery_current_sample     = LinearCorrection(raw_adc_battery_current, currents_board_cal_data.calibrations[0].slope, currents_board_cal_data.calibrations[0].intercept);
-            float current_motor_left_sample  = LinearCorrection(raw_adc_motor_left_current, currents_board_cal_data.calibrations[1].slope, currents_board_cal_data.calibrations[1].intercept);
-            float current_motor_right_sample = LinearCorrection(raw_adc_motor_right_current, currents_board_cal_data.calibrations[2].slope, currents_board_cal_data.calibrations[2].intercept);
-            float current_mppt_sample        = LinearCorrection(raw_adc_mppt_current, currents_board_cal_data.calibrations[3].slope, currents_board_cal_data.calibrations[3].intercept);
+        //     float battery_current_sample     = LinearCorrection(raw_adc_battery_current, currents_board_cal_data.calibrations[0].slope, currents_board_cal_data.calibrations[0].intercept);
+        //     float current_motor_left_sample  = LinearCorrection(raw_adc_motor_left_current, currents_board_cal_data.calibrations[1].slope, currents_board_cal_data.calibrations[1].intercept);
+        //     float current_motor_right_sample = LinearCorrection(raw_adc_motor_right_current, currents_board_cal_data.calibrations[2].slope, currents_board_cal_data.calibrations[2].intercept);
+        //     float current_mppt_sample        = LinearCorrection(raw_adc_mppt_current, currents_board_cal_data.calibrations[3].slope, currents_board_cal_data.calibrations[3].intercept);
 
-            // Apply low-pass IIR filtering to smooth the readings
-            battery_current.filter(battery_current_sample);
-            current_motor_left.filter(current_motor_left_sample);
-            current_motor_right.filter(current_motor_right_sample);
-            current_mppt.filter(current_mppt_sample);
+        //     // Apply low-pass IIR filtering to smooth the readings
+        //     battery_current.filter(battery_current_sample);
+        //     current_motor_left.filter(current_motor_left_sample);
+        //     current_motor_right.filter(current_motor_right_sample);
+        //     current_mppt.filter(current_mppt_sample);
 
-            buffer_current_len += snprintf(
-                instrumentation_debug_buffer + buffer_current_len,
-                sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                "%s[Currents ADC 0x%X | EEPROM 0x%X]\n"
-                "  Battery Current:     %.2f A (RawADC: %d)\n"
-                "  Motor Left Current:  %.2f A (RawADC: %d)\n"
-                "  Motor Right Current: %.2f A (RawADC: %d)\n"
-                "  MPPT Current:        %.2f A (RawADC: %d)\n",
-                (buffer_current_len == 0) ? "" : "\n",
-                currents_adc_address, currents_board_eeprom_address,
-                battery_current.value(),     raw_adc_battery_current,
-                current_motor_left.value(),  raw_adc_motor_left_current,
-                current_motor_right.value(), raw_adc_motor_right_current,
-                current_mppt.value(),        raw_adc_mppt_current
-            );
+        //     buffer_current_len += snprintf(
+        //         instrumentation_debug_buffer + buffer_current_len,
+        //         sizeof(instrumentation_debug_buffer) - buffer_current_len,
+        //         "%s[Currents ADC 0x%X | EEPROM 0x%X]\n"
+        //         "  Battery Current:     %.2f A (RawADC: %d)\n"
+        //         "  Motor Left Current:  %.2f A (RawADC: %d)\n"
+        //         "  Motor Right Current: %.2f A (RawADC: %d)\n"
+        //         "  MPPT Current:        %.2f A (RawADC: %d)\n",
+        //         (buffer_current_len == 0) ? "" : "\n",
+        //         currents_adc_address, currents_board_eeprom_address,
+        //         battery_current.value(),     raw_adc_battery_current,
+        //         current_motor_left.value(),  raw_adc_motor_left_current,
+        //         current_motor_right.value(), raw_adc_motor_right_current,
+        //         current_mppt.value(),        raw_adc_mppt_current
+        //     );
 
-        } else {
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Currents Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           currents_adc_address, currents_board_eeprom_address);
-        }
+        // } else {
+        //     buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+        //                                    sizeof(instrumentation_debug_buffer) - buffer_current_len,
+        //                                    "%s[Currents Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
+        //                                    (buffer_current_len == 0) ? "" : "\n",
+        //                                    currents_adc_address, currents_board_eeprom_address);
+        // }
 
-        if (is_voltages_adc_initialized && is_voltages_cal_loaded) {
+        // if (is_voltages_adc_initialized && is_voltages_cal_loaded) {
 
-            int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(0);
-            int16_t raw_adc_pump_left_voltage = voltagesAdc.readADC_SingleEnded(1);
-            int16_t raw_adc_pump_right_voltage = voltagesAdc.readADC_SingleEnded(2);
-            int16_t raw_adc_main_battery_voltage = voltagesAdc.readADC_SingleEnded(3);
+        //     int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(0);
+        //     int16_t raw_adc_pump_left_voltage = voltagesAdc.readADC_SingleEnded(1);
+        //     int16_t raw_adc_pump_right_voltage = voltagesAdc.readADC_SingleEnded(2);
+        //     int16_t raw_adc_main_battery_voltage = voltagesAdc.readADC_SingleEnded(3);
 
-            // Convert raw ADC readings to calibrated values using the loaded calibration data
-            float irradiance_sample = LinearCorrection(raw_adc_irradiance, voltages_board_cal_data.calibrations[0].slope, voltages_board_cal_data.calibrations[0].intercept);
-            float pump_left_voltage_sample = LinearCorrection(raw_adc_pump_left_voltage, voltages_board_cal_data.calibrations[1].slope, voltages_board_cal_data.calibrations[1].intercept);              
-            float pump_right_voltage_sample = LinearCorrection(raw_adc_pump_right_voltage, voltages_board_cal_data.calibrations[2].slope, voltages_board_cal_data.calibrations[2].intercept);                                                                                              
-            float main_battery_voltage_sample = LinearCorrection(raw_adc_main_battery_voltage, voltages_board_cal_data.calibrations[3].slope, voltages_board_cal_data.calibrations[3].intercept);
+        //     // Convert raw ADC readings to calibrated values using the loaded calibration data
+        //     float irradiance_sample = LinearCorrection(raw_adc_irradiance, voltages_board_cal_data.calibrations[0].slope, voltages_board_cal_data.calibrations[0].intercept);
+        //     float pump_left_voltage_sample = LinearCorrection(raw_adc_pump_left_voltage, voltages_board_cal_data.calibrations[1].slope, voltages_board_cal_data.calibrations[1].intercept);              
+        //     float pump_right_voltage_sample = LinearCorrection(raw_adc_pump_right_voltage, voltages_board_cal_data.calibrations[2].slope, voltages_board_cal_data.calibrations[2].intercept);                                                                                              
+        //     float main_battery_voltage_sample = LinearCorrection(raw_adc_main_battery_voltage, voltages_board_cal_data.calibrations[3].slope, voltages_board_cal_data.calibrations[3].intercept);
                                                                                   
-            // Apply low-pass IIR filtering to smooth the irradiance reading
-            irradiance.filter(irradiance_sample);
-            pump_left_voltage.filter(pump_left_voltage_sample);
-            pump_right_voltage.filter(pump_right_voltage_sample);
-            main_battery_voltage.filter(main_battery_voltage_sample);
+        //     // Apply low-pass IIR filtering to smooth the irradiance reading
+        //     irradiance.filter(irradiance_sample);
+        //     pump_left_voltage.filter(pump_left_voltage_sample);
+        //     pump_right_voltage.filter(pump_right_voltage_sample);
+        //     main_battery_voltage.filter(main_battery_voltage_sample);
             
-            buffer_current_len += snprintf(
-                instrumentation_debug_buffer + buffer_current_len,
-                sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
-                "  Irradiance: %.0f W/m^2 (RawADC: %d)\n"
-                "  Pump Left Voltage: %.2f V (RawADC: %d)\n"
-                "  Pump Right Voltage: %.2f V (RawADC: %d)\n"
-                "  Main Battery Voltage: %.2f V (RawADC: %d)\n",
-                (buffer_current_len == 0) ? "" : "\n",
-                voltages_adc_address, voltages_board_eeprom_address,
-                irradiance.value(), raw_adc_irradiance,
-                pump_left_voltage.value(), raw_adc_pump_left_voltage,
-                pump_right_voltage.value(), raw_adc_pump_right_voltage,
-                main_battery_voltage.value(), raw_adc_main_battery_voltage
-            );
+        //     buffer_current_len += snprintf(
+        //         instrumentation_debug_buffer + buffer_current_len,
+        //         sizeof(instrumentation_debug_buffer) - buffer_current_len,
+        //         "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
+        //         "  Irradiance: %.0f W/m^2 (RawADC: %d)\n"
+        //         "  Pump Left Voltage: %.2f V (RawADC: %d)\n"
+        //         "  Pump Right Voltage: %.2f V (RawADC: %d)\n"
+        //         "  Main Battery Voltage: %.2f V (RawADC: %d)\n",
+        //         (buffer_current_len == 0) ? "" : "\n",
+        //         voltages_adc_address, voltages_board_eeprom_address,
+        //         irradiance.value(), raw_adc_irradiance,
+        //         pump_left_voltage.value(), raw_adc_pump_left_voltage,
+        //         pump_right_voltage.value(), raw_adc_pump_right_voltage,
+        //         main_battery_voltage.value(), raw_adc_main_battery_voltage
+        //     );
 
 
-        } else {
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Voltages Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           voltages_adc_address, voltages_board_eeprom_address);
-        }
+        // } else {
+        //     buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+        //                                    sizeof(instrumentation_debug_buffer) - buffer_current_len,
+        //                                    "%s[Voltages Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
+        //                                    (buffer_current_len == 0) ? "" : "\n",
+        //                                    voltages_adc_address, voltages_board_eeprom_address);
+        // }
 
         // --- PROPULSION ADC ---
         if (is_propulsion_adc_initialized) {
             // Read propulsion ADC channels (assuming 4 channels for motors)
-            int16_t backup_potentiometer = propulsionAdc.readADC_SingleEnded(0);
-            int16_t helm_potentiometer = propulsionAdc.readADC_SingleEnded(1);
-            int16_t throttle_left_potentiometer = propulsionAdc.readADC_SingleEnded(2);
-            int16_t throttle_right_potentiometer = propulsionAdc.readADC_SingleEnded(3);
+            int16_t backup_potentiometer_adc = propulsionAdc.readADC_SingleEnded(0);
+            int16_t helm_potentiometer_adc = propulsionAdc.readADC_SingleEnded(1);
+            int16_t throttle_left_potentiometer_adc = propulsionAdc.readADC_SingleEnded(2);
+            int16_t throttle_right_potentiometer_adc = propulsionAdc.readADC_SingleEnded(3);
+
+            float backup_potentiometer_volts = LinearCorrection(backup_potentiometer_adc, 
+                0.00019, 
+                0.0398f); //!FIX ME LATER USING FLASH MEMORY FOR CALIBRATION
 
             //Get values directly in Volts without calibration since we assume 1:1 slope and intercept
-            float backup_potentiometer_volts = propulsionAdc.computeVolts(backup_potentiometer);
-            float helm_potentiometer_volts = propulsionAdc.computeVolts(helm_potentiometer);
-            float throttle_left_potentiometer_volts = propulsionAdc.computeVolts(throttle_left_potentiometer);
-            float throttle_right_potentiometer_volts = propulsionAdc.computeVolts(throttle_right_potentiometer);
+            float helm_potentiometer_volts = propulsionAdc.computeVolts(helm_potentiometer_adc);
+            float throttle_left_potentiometer_volts = propulsionAdc.computeVolts(throttle_left_potentiometer_adc);
+            float throttle_right_potentiometer_volts = propulsionAdc.computeVolts(throttle_right_potentiometer_adc);
 
+            // Apply low-pass IIR filtering to smooth the readings
+            backup_potentiometer.filter(backup_potentiometer_volts);
+            helm_potentiometer.filter(helm_potentiometer_volts);
+            throttle_left_potentiometer.filter(throttle_left_potentiometer_volts);
+            throttle_right_potentiometer.filter(throttle_right_potentiometer_volts);
+           
+            // Build the output string with propulsion ADC data
             buffer_current_len += snprintf(
                 instrumentation_debug_buffer + buffer_current_len,
                 sizeof(instrumentation_debug_buffer) - buffer_current_len,
@@ -482,10 +499,10 @@ void InstrumentationTask(void* parameter) {
                 "  Throttle Right Potentiometer: %.2f V (RawADC: %d)\n",
                 (buffer_current_len == 0) ? "" : "\n",
                 propulsion_adc_address,
-                backup_potentiometer_volts, backup_potentiometer,
-                helm_potentiometer_volts, helm_potentiometer,
-                throttle_left_potentiometer_volts, throttle_left_potentiometer,
-                throttle_right_potentiometer_volts, throttle_right_potentiometer
+                backup_potentiometer.value(), backup_potentiometer_adc,
+                helm_potentiometer.value(), helm_potentiometer_adc,
+                throttle_left_potentiometer.value(), throttle_left_potentiometer_adc,
+                throttle_right_potentiometer.value(), throttle_right_potentiometer_adc
             );
 
         } else {
@@ -496,28 +513,28 @@ void InstrumentationTask(void* parameter) {
                                            propulsion_adc_address);
         }
         
-        // --- Readings from Auxiliary Battery Monitor (INA226) ---
-        if (is_aux_battery_monitor_initialized) {
-            float aux_bus_voltage = aux_battery_monitor.getBusVoltage();
-            // Apply the specific calibration for current: * 0.786f + 8.48E-3f
-            float aux_current = aux_battery_monitor.getCurrent() * 0.786f + 0.00848f; 
-            float aux_power = aux_battery_monitor.getPower();
-            // float aux_shunt_voltage_mv = aux_battery_monitor.getShuntVoltage_mV(); // Optional for debugging
+        // // --- Readings from Auxiliary Battery Monitor (INA226) ---
+        // if (is_aux_battery_monitor_initialized) {
+        //     float aux_bus_voltage = aux_battery_monitor.getBusVoltage();
+        //     // Apply the specific calibration for current: * 0.786f + 8.48E-3f
+        //     float aux_current = aux_battery_monitor.getCurrent() * 0.786f + 0.00848f; 
+        //     float aux_power = aux_battery_monitor.getPower();
+        //     // float aux_shunt_voltage_mv = aux_battery_monitor.getShuntVoltage_mV(); // Optional for debugging
 
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Aux Battery INA226 0x%X]\n"
-                                           "  Aux V: %.2fV, Aux I: %.3fA, Aux P: %.2fW\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           aux_battery_ina226_address,
-                                           aux_bus_voltage, aux_current, aux_power);
-        } else {
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Aux Battery INA226 (0x%X) not ready.]\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           aux_battery_ina226_address);
-        }
+        //     buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+        //                                    sizeof(instrumentation_debug_buffer) - buffer_current_len,
+        //                                    "%s[Aux Battery INA226 0x%X]\n"
+        //                                    "  Aux V: %.2fV, Aux I: %.3fA, Aux P: %.2fW\n",
+        //                                    (buffer_current_len == 0) ? "" : "\n",
+        //                                    aux_battery_ina226_address,
+        //                                    aux_bus_voltage, aux_current, aux_power);
+        // } else {
+        //     buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+        //                                    sizeof(instrumentation_debug_buffer) - buffer_current_len,
+        //                                    "%s[Aux Battery INA226 (0x%X) not ready.]\n",
+        //                                    (buffer_current_len == 0) ? "" : "\n",
+        //                                    aux_battery_ina226_address);
+        // }
 
         // --- Print the accumulated debug information ---
         static unsigned long last_print_time = 0;
@@ -541,25 +558,42 @@ void InstrumentationTask(void* parameter) {
         last_post_time_ms = millis(); // Update last post time
 
         //Pass data to queues
-        message_t msg;
-        msg.source = DATA_SOURCE_INSTRUMENTATION;
-        auto& data = msg.payload.instrumentation;
-        data.battery_current_cA = static_cast<int16_t>(battery_current.value() * 100.0f); // Convert to centiAmperes
-        data.motor_current_left_cA = static_cast<int16_t>(current_motor_left.value() * 100.0f); // Convert to centiAmperes
-        data.motor_current_right_cA = static_cast<int16_t>(current_motor_right.value() * 100.0f); // Convert to centiAmperes
-        data.mppt_current_cA = static_cast<int16_t>(current_mppt.value() * 100.0f); // Convert to centiAmperes
-        data.battery_voltage_cV = static_cast<uint16_t>(main_battery_voltage.value() * 100.0f); // Convert to centiVolts
-        data.auxiliary_battery_voltage_cV = static_cast<uint16_t>(aux_battery_monitor.getBusVoltage() * 100.0f); // Convert to centiVolts
-        data.irradiance = static_cast<uint16_t>(irradiance.value()); // Convert to W/m^2
-        data.timestamp_ms = millis(); // Timestamp in milliseconds
+        unsigned long time_boot_ms = millis();
 
-        msg.timestamp.epoch_ms = get_epoch_seconds();
-        msg.timestamp.epoch_ms = get_epoch_millis();
-        msg.timestamp.time_since_boot_ms = data.timestamp_ms;
+        // message_t msg;
+        // msg.source = DATA_SOURCE_INSTRUMENTATION;
+        // auto& data = msg.payload.instrumentation;
+        // data.battery_current_cA = static_cast<int16_t>(battery_current.value() * 100.0f); // Convert to centiAmperes
+        // data.motor_current_left_cA = static_cast<int16_t>(current_motor_left.value() * 100.0f); // Convert to centiAmperes
+        // data.motor_current_right_cA = static_cast<int16_t>(current_motor_right.value() * 100.0f); // Convert to centiAmperes
+        // data.mppt_current_cA = static_cast<int16_t>(current_mppt.value() * 100.0f); // Convert to centiAmperes
+        // data.battery_voltage_cV = static_cast<uint16_t>(main_battery_voltage.value() * 100.0f); // Convert to centiVolts
+        // data.auxiliary_battery_voltage_cV = static_cast<uint16_t>(aux_battery_monitor.getBusVoltage() * 100.0f); // Convert to centiVolts
+        // data.irradiance = static_cast<uint16_t>(irradiance.value()); // Convert to W/m^2
+        // data.timestamp_ms = time_boot_ms; // Timestamp in milliseconds
 
-        // Send the message to the broker
-        if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(20)) != pdTRUE) {
-            DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
-        } 
+        // msg.timestamp.epoch_ms = get_epoch_seconds();
+        // msg.timestamp.epoch_ms = get_epoch_millis();
+        // msg.timestamp.time_since_boot_ms = time_boot_ms;
+
+        // //Send the message to the broker
+        // if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(20)) != pdTRUE) {
+        //     DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
+        // } 
+
+        message_t propulsion_msg;
+        propulsion_msg.source = DATA_SOURCE_PROPULSION;
+        auto& propulsion_data = propulsion_msg.payload.propulsion;
+        propulsion_data.backup_potentiometer_volts = static_cast<uint16_t>(backup_potentiometer.value());
+        propulsion_data.helm_potentiometer_volts = static_cast<uint16_t>(helm_potentiometer.value());
+        propulsion_data.throttle_left_potentiometer_volts = static_cast<uint16_t>(throttle_left_potentiometer.value());
+        propulsion_data.throttle_right_potentiometer_volts = static_cast<uint16_t>(throttle_right_potentiometer.value());
+        propulsion_msg.timestamp.epoch_ms = get_epoch_seconds();
+        propulsion_msg.timestamp.epoch_ms = get_epoch_millis();
+        propulsion_msg.timestamp.time_since_boot_ms = time_boot_ms;
+        // Send the propulsion message to the broker
+        if (xQueueSend(broker_queue, &propulsion_msg, pdMS_TO_TICKS(20)) != pdTRUE) {
+            DEBUG_PRINTF("[PROPULSION]Error: queue is full\n");
+        }
     }
 }

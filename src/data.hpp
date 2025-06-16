@@ -7,6 +7,7 @@
 #include "data_mppt.h"
 #include "data_instrumentation.h"
 #include "data_bms.h"
+#include "data_propulsion.h"
 
 // A dedicated struct for timestamping
 typedef struct {
@@ -22,6 +23,7 @@ typedef enum {
     DATA_SOURCE_GPS,
     DATA_SOURCE_MPPT,
     DATA_SOURCE_INSTRUMENTATION,
+    DATA_SOURCE_PROPULSION,
     DATA_SOURCE_TEMPERATURES 
 } data_source_t;
 
@@ -33,6 +35,7 @@ const char* const DATA_SOURCE_NAMES[] = {
     "GPS",
     "MPPT",
     "Instrumentation",
+    "Propulsion",
     "Temperatures"
 };
 
@@ -44,6 +47,7 @@ typedef struct {
         gps_data_t gps;
         mppt_data_t mppt;
         instrumentation_data_t instrumentation;
+        propulsion_data_t propulsion;
         temperature_data_t temperature;
     } payload;
     
