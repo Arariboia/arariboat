@@ -148,8 +148,8 @@ void MPPTController::printHumanReadableEquipmentStatus() const {
 void mppt_task(void *parameters) {
 
         // --- Configuration ---
-    constexpr gpio_num_t MPPT_RX_PIN = GPIO_NUM_22;
-    constexpr gpio_num_t MPPT_TX_PIN = GPIO_NUM_23;
+    constexpr gpio_num_t MPPT_RX_PIN = GPIO_NUM_35;
+    constexpr gpio_num_t MPPT_TX_PIN = GPIO_NUM_33;
     constexpr int MODBUS_SLAVE_ID = 1;
     const unsigned long PRINT_INTERVAL_MS = 2000; // How often to print data to Serial
 
