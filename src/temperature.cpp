@@ -138,57 +138,59 @@ void TemperatureTask(void* parameter) {
   
     #define S1 0x28, 0x37, 0x1E, 0x04, 0x00, 0x00, 0x00, 0xA6
     #define S2 0x28, 0xFF, 0x25, 0x61, 0xA3, 0x16, 0x05, 0x16
-    #define S3 0x28, 0xFF, 0x64, 0x1F, 0x4D, 0xB8, 0xFE, 0xDA
+    #define S3 0x28, 0xFF, 0x64, 0x1F, 0x4D, 0xB8, 0xFE, 0xDA 
     #define S4 0x28, 0xCF, 0x67, 0x49, 0xF6, 0x4D, 0x3C, 0xC5
-    #define S5 0x28, 0xFF, 0x6F, 0x10, 0xA0, 0x16, 0x03, 0x5C
+    #define S5 0x28, 0xFF, 0x6F, 0x10, 0xA0, 0x16, 0x03, 0x5C 
+    #define S6 0x28, 0x86, 0x1C, 0x07, 0xD6, 0x01, 0x3C, 0x8C
+
 
     //Each probe has a unique 8-byte address. Use the scanIndex method to initially find the addresses of the probes. 
     //Then hardcode the addresses into the program. This is done to avoid the overhead of scanning for the addresses every time the function is called.
     //You should then physically label the probes with tags or stripes as to differentiate them.
-    DeviceAddress thermal_probe_mppt_left = {S1};
-    DeviceAddress thermal_probe_mppt_right = {S2};
-    DeviceAddress thermal_probe_battery_left = {S3};
+    DeviceAddress thermal_probe_mppt_left = {S3};
+    DeviceAddress thermal_probe_mppt_right = {S5};
+    DeviceAddress thermal_probe_battery_left = {S6};
     DeviceAddress thermal_probe_battery_right = {S4};
 
     //Register serial callback commands
     esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &probes);
 
     while (true) {
-        // PrintAllDetectedTemperatures(probes); // Generic function to print temperatures from any connected sensor
+        PrintAllDetectedTemperatures(probes); // Generic function to print temperatures from any connected sensor
         
-        probes.begin();
-        int device_count = probes.getDeviceCount();
-        if (device_count == 0) {
-            Serial.println("[Temperature] No sensors detected.");
-            vTaskDelay(pdMS_TO_TICKS(500));
-            continue;
-        }
+        // probes.begin();
+        // int device_count = probes.getDeviceCount();
+        // if (device_count == 0) {
+        //     Serial.println("[Temperature] No sensors detected.");
+        //     vTaskDelay(pdMS_TO_TICKS(500));
+        //     continue;
+        // }
 
-        probes.requestTemperatures();
-        float temperature_mppt_left = probes.getTempC(thermal_probe_mppt_left);
-        float temperature_mppt_right = probes.getTempC(thermal_probe_mppt_right);
-        float temperature_battery_left = probes.getTempC(thermal_probe_battery_left);
-        float temperature_battery_right = probes.getTempC(thermal_probe_battery_right);
+        // probes.requestTemperatures();
+        // float temperature_mppt_left = probes.getTempC(thermal_probe_mppt_left);
+        // float temperature_mppt_right = probes.getTempC(thermal_probe_mppt_right);
+        // float temperature_battery_left = probes.getTempC(thermal_probe_battery_left);
+        // float temperature_battery_right = probes.getTempC(thermal_probe_battery_right);
 
-        message_t msg;
-        msg.source = DATA_SOURCE_TEMPERATURES; 
-        msg.timestamp.time_since_boot_ms = millis();
-        msg.timestamp.epoch_seconds = get_epoch_seconds();
-        msg.timestamp.epoch_ms = get_epoch_millis();
+        // message_t msg;
+        // msg.source = DATA_SOURCE_TEMPERATURES; 
+        // msg.timestamp.time_since_boot_ms = millis();
+        // msg.timestamp.epoch_seconds = get_epoch_seconds();
+        // msg.timestamp.epoch_ms = get_epoch_millis();
 
-        auto& temperature = msg.payload.temperature;
-        temperature.battery_left_cdegC = (temperature_battery_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_left * 100);
-        temperature.battery_right_cdegC = (temperature_battery_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_right * 100);
-        temperature.mppt_left_cdegC = (temperature_mppt_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_left * 100);
-        temperature.mppt_right_cdegC = (temperature_mppt_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_right * 100);
+        // auto& temperature = msg.payload.temperature;
+        // temperature.battery_left_cdegC = (temperature_battery_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_left * 100);
+        // temperature.battery_right_cdegC = (temperature_battery_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_right * 100);
+        // temperature.mppt_left_cdegC = (temperature_mppt_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_left * 100);
+        // temperature.mppt_right_cdegC = (temperature_mppt_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_right * 100);
 
-        // Send the temperature data to the central broker queue
-        if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(10)) != pdPASS) {
-            Serial.println("[Temperature] Warning: Failed to send temperature data to broker queue.");
-        }
+        // // Send the temperature data to the central broker queue
+        // if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(10)) != pdPASS) {
+        //     Serial.println("[Temperature] Warning: Failed to send temperature data to broker queue.");
+        // }
 
-        PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt_left, temperature_mppt_right);
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        // PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt_left, temperature_mppt_right);
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
 
