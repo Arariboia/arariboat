@@ -156,40 +156,40 @@ void TemperatureTask(void* parameter) {
     esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &probes);
 
     while (true) {
-        PrintAllDetectedTemperatures(probes); // Generic function to print temperatures from any connected sensor
+        // PrintAllDetectedTemperatures(probes); // Generic function to print temperatures from any connected sensor
         
-        // probes.begin();
-        // int device_count = probes.getDeviceCount();
-        // if (device_count == 0) {
-        //     Serial.println("[Temperature] No sensors detected.");
-        //     vTaskDelay(pdMS_TO_TICKS(500));
-        //     continue;
-        // }
+        probes.begin();
+        int device_count = probes.getDeviceCount();
+        if (device_count == 0) {
+            Serial.println("[Temperature] No sensors detected.");
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
 
-        // probes.requestTemperatures();
-        // float temperature_mppt_left = probes.getTempC(thermal_probe_mppt_left);
-        // float temperature_mppt_right = probes.getTempC(thermal_probe_mppt_right);
-        // float temperature_battery_left = probes.getTempC(thermal_probe_battery_left);
-        // float temperature_battery_right = probes.getTempC(thermal_probe_battery_right);
+        probes.requestTemperatures();
+        float temperature_mppt_left = probes.getTempC(thermal_probe_mppt_left);
+        float temperature_mppt_right = probes.getTempC(thermal_probe_mppt_right);
+        float temperature_battery_left = probes.getTempC(thermal_probe_battery_left);
+        float temperature_battery_right = probes.getTempC(thermal_probe_battery_right);
 
-        // message_t msg;
-        // msg.source = DATA_SOURCE_TEMPERATURES; 
-        // msg.timestamp.time_since_boot_ms = millis();
-        // msg.timestamp.epoch_seconds = get_epoch_seconds();
-        // msg.timestamp.epoch_ms = get_epoch_millis();
+        message_t msg;
+        msg.source = DATA_SOURCE_TEMPERATURES; 
+        msg.timestamp.time_since_boot_ms = millis();
+        msg.timestamp.epoch_seconds = get_epoch_seconds();
+        msg.timestamp.epoch_ms = get_epoch_millis();
 
-        // auto& temperature = msg.payload.temperature;
-        // temperature.battery_left_cdegC = (temperature_battery_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_left * 100);
-        // temperature.battery_right_cdegC = (temperature_battery_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_right * 100);
-        // temperature.mppt_left_cdegC = (temperature_mppt_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_left * 100);
-        // temperature.mppt_right_cdegC = (temperature_mppt_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_right * 100);
+        auto& temperature = msg.payload.temperature;
+        temperature.battery_left_cdegC = (temperature_battery_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_left * 100);
+        temperature.battery_right_cdegC = (temperature_battery_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_battery_right * 100);
+        temperature.mppt_left_cdegC = (temperature_mppt_left == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_left * 100);
+        temperature.mppt_right_cdegC = (temperature_mppt_right == DEVICE_DISCONNECTED_C) ? SENSOR_DISCONNECTED_CDEGC : static_cast<int16_t>(temperature_mppt_right * 100);
 
-        // // Send the temperature data to the central broker queue
-        // if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(10)) != pdPASS) {
-        //     Serial.println("[Temperature] Warning: Failed to send temperature data to broker queue.");
-        // }
+        // Send the temperature data to the central broker queue
+        if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(10)) != pdPASS) {
+            Serial.println("[Temperature] Warning: Failed to send temperature data to broker queue.");
+        }
 
-        // PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt_left, temperature_mppt_right);
+        PrintDebugTemperature(temperature_battery_left, temperature_battery_right, temperature_mppt_left, temperature_mppt_right);
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
