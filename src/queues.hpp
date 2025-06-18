@@ -9,6 +9,7 @@ extern QueueHandle_t auxiliary_radio_queue;
 extern QueueHandle_t internet_queue;
 extern QueueHandle_t logger_queue;
 extern QueueHandle_t can_queue; 
+extern QueueHandle_t propulsion_queue;
 
 // Function to initialize all queues
 extern void initialize_queues();

@@ -17,7 +17,7 @@ static void commandCallback(void* handler_args, esp_event_base_t base, int32_t i
     }
 }
 
-void WifiTask(void* parameter) {
+void wifi_task(void* parameter) {
     
     std::unordered_map<const char*, const char*> wifiCredentials;
     wifiCredentials["Ararirouter"] = "arariboia";
@@ -81,7 +81,7 @@ void ConfigureMDNS() {
     }
 }
 
-void ServerTask(void* parameter) {
+void server_task(void* parameter) {
 
     // Create an async web server on port 80. This is the default port for HTTP. 
     // Async server can handle multiple requests at the same time without blocking the task.

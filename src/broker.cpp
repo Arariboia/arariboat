@@ -17,28 +17,42 @@ void broker_task(void* parameter) {
             
             Serial.printf("[broker_task] Received message from source: %s\n", DATA_SOURCE_NAMES[received_message.source]);
             
-            // 1. Send to the Logger Task
-            if (logger_queue != NULL) {
-                // Send a copy of the message. Use a small timeout to prevent the broker
-                // from blocking if the logger's queue is full.
-                if (xQueueSend(logger_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
-                    Serial.println("[broker_task] Warning: Failed to send message to Logger queue.");
-                }
-            }
+            // // 1. Send to the Logger Task
+            // if (logger_queue != NULL) {
+            //     // Send a copy of the message. Use a small timeout to prevent the broker
+            //     // from blocking if the logger's queue is full.
+            //     if (xQueueSend(logger_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
+            //         Serial.println("[broker_task] Warning: Failed to send message to Logger queue.");
+            //     }
+            // }
 
-            // 2. Send to the Radio Task
-            if (main_radio_queue != NULL) {
-                // Send a copy of the same message to the radio task.
-                if (xQueueSend(main_radio_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
-                    Serial.println("[broker_task] Warning: Failed to send message to Radio queue.");
-                }
-            }
+            // // 2. Send to the Radio Task
+            // if (main_radio_queue != NULL) {
+            //     // Send a copy of the same message to the radio task.
+            //     if (xQueueSend(main_radio_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
+            //         Serial.println("[broker_task] Warning: Failed to send message to Radio queue.");
+            //     }
+            // }
 
             // 3. Send to the Auxiliary Radio Task (if applicable)
             if (auxiliary_radio_queue != NULL) {
                 // Send a copy of the same message to the auxiliary radio task.
                 if (xQueueSend(auxiliary_radio_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
                     Serial.println("[broker_task] Warning: Failed to send message to Auxiliary Radio queue.");
+                }
+            }
+
+            if (can_queue != NULL) {
+                // Send a copy of the same message to the CAN task.
+                if (xQueueSend(can_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
+                    Serial.println("[broker_task] Warning: Failed to send message to CAN queue.");
+                }
+            }
+
+            if (propulsion_queue != NULL) {
+                // Send a copy of the same message to the Propulsion task.
+                if (xQueueSend(propulsion_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
+                    Serial.println("[broker_task] Warning: Failed to send message to Propulsion queue.");
                 }
             }
 

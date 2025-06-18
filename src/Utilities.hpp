@@ -33,8 +33,8 @@
 
 
 void led_manager_task(void* parameter);
-void WifiTask(void* parameter);
-void ServerTask(void* parameter);
+void wifi_task(void* parameter);
+void server_task(void* parameter);
 void SerialTask(void* parameter);
 void TemperatureTask(void* parameter);
 void GPSTask(void* parameter);
