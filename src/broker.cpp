@@ -2,6 +2,7 @@
 #include "data.hpp"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include "propulsion_defs.h"
 
 void broker_task(void* parameter) {
     Serial.print("[broker_task] Starting... ");
@@ -34,14 +35,6 @@ void broker_task(void* parameter) {
             //     }
             // }
 
-            // 3. Send to the Auxiliary Radio Task (if applicable)
-            if (auxiliary_radio_queue != NULL) {
-                // Send a copy of the same message to the auxiliary radio task.
-                if (xQueueSend(auxiliary_radio_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
-                    Serial.println("[broker_task] Warning: Failed to send message to Auxiliary Radio queue.");
-                }
-            }
-
             if (can_queue != NULL) {
                 // Send a copy of the same message to the CAN task.
                 if (xQueueSend(can_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
@@ -49,12 +42,14 @@ void broker_task(void* parameter) {
                 }
             }
 
+            #ifdef PROPULSION_BOARD
             if (propulsion_queue != NULL) {
                 // Send a copy of the same message to the Propulsion task.
                 if (xQueueSend(propulsion_queue, &received_message, pdMS_TO_TICKS(10)) != pdPASS) {
                     Serial.println("[broker_task] Warning: Failed to send message to Propulsion queue.");
                 }
             }
+            #endif
 
             // You could add more complex logic here, for example:
             // if (received_message.source == DATA_SOURCE_GPS) {
