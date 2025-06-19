@@ -8,6 +8,9 @@
 #include "bms_can_manager.h"
 #include "led.hpp"
 #include "Utilities.hpp"
+#include "queues.hpp"
+#include "arariboat/mavlink.h"
+#include "mavlink_data_conversion.h"
 
 #ifdef DEBUG
 #undef DEBUG // Uncomment to enable debug messages locally in this file
@@ -17,6 +20,67 @@ static const char* TAG = "CAN";
 
 MotorCANManager motor_can_manager;
 BMSCANManager bms_can_manager;
+
+// --- Constants ---
+#define MAVLINK_STREAM_CAN_ID 0xABC // The single CAN ID for streaming all MAVLink messages
+
+// Enum for each MAVLink message type that needs independent throttling.
+enum ThrottledMessage {
+    MSG_BMS,
+    MSG_BMS_STATUS,
+    MSG_MOTOR_I_LEFT,
+    MSG_MOTOR_II_LEFT,
+    MSG_MOTOR_I_RIGHT,
+    MSG_MOTOR_II_RIGHT,
+    MSG_MPPT,
+    MSG_MPPT_STATE,
+    MSG_GPS,
+    MSG_INSTRUMENTATION,
+    MSG_TEMPERATURES,
+    NUM_THROTTLED_MESSAGES // Must be last
+};
+
+/**
+ * @brief Serializes a MAVLink message and transmits it as a stream of CAN frames.
+ * All frames are sent with the same CAN ID (MAVLINK_STREAM_CAN_ID). The receiver
+ * is expected to reassemble the bytes from these frames to parse the complete MAVLink message.
+ * @param msg The MAVLink message to send.
+ */
+static void send_mavlink_can_stream(const mavlink_message_t* msg) {
+    // 1. Serialize the entire MAVLink message (header, payload, checksum) into a buffer.
+    uint8_t mav_buffer[MAVLINK_MAX_PACKET_LEN];
+    uint16_t mav_len = mavlink_msg_to_send_buffer(mav_buffer, msg);
+    
+    // char output_buffer[2 * MAVLINK_MAX_PACKET_LEN + 1] = {0};
+    // if (!bytes_to_hex_string(output_buffer, sizeof(output_buffer), mav_buffer, mav_len)) {
+    //     DEBUG_PRINTF("[CAN] Failed to convert MAVLink message to hex string for MSG ID: %d\n", msg->msgid);
+    //     return; // Abort sending if conversion fails
+    // }
+    // Serial.printf("[CAN][DEBUG] Packet = %s\n", output_buffer);
+
+    // 2. Prepare the CAN frame structure. It will be reused for each chunk.
+    twai_message_t can_msg;
+    can_msg.flags = TWAI_MSG_FLAG_EXTD;
+    can_msg.identifier = MAVLINK_STREAM_CAN_ID;
+
+    // 3. Loop through the serialized buffer and transmit it in 8-byte chunks.
+    uint16_t bytes_sent = 0;
+    while (bytes_sent < mav_len) {
+        uint8_t chunk_size = (mav_len - bytes_sent > 8) ? 8 : (mav_len - bytes_sent);
+        can_msg.data_length_code = chunk_size;
+        memcpy(can_msg.data, &mav_buffer[bytes_sent], chunk_size);
+
+        // Transmit the current chunk.
+        if (twai_transmit(&can_msg, pdMS_TO_TICKS(50)) != ESP_OK) {
+            DEBUG_PRINTF("[CAN] Failed to send stream chunk for MAVLink MSG ID: %d\n", msg->msgid);
+            return; // Abort sending the rest of this packet on failure.
+        }
+        bytes_sent += chunk_size;
+    }
+    
+    // The ceiling of (mav_len / 8) gives the number of frames sent.
+    DEBUG_PRINTF("[CAN] Sent MAVLink MSG ID %d (%u bytes) in %u CAN frames.\n", msg->msgid, mav_len, (mav_len + 7) / 8);
+}
 
 void can_receive_task(void* parameter) {
     while (true) {
@@ -53,12 +117,83 @@ void can_receive_task(void* parameter) {
 }
 
 void can_transmit_task(void* parameter) {
+
+    // Timers for each specific MAVLink message type.
+    static uint32_t last_sent_time[NUM_THROTTLED_MESSAGES] = {0};
+    const uint32_t send_intervals_ms[] = {
+        [MSG_BMS]               = 1000,  // 1 Hz
+        [MSG_BMS_STATUS]        = 5000,  // 0.2 Hz
+        [MSG_MOTOR_I_LEFT]      = 500,   // 2 Hz
+        [MSG_MOTOR_II_LEFT]     = 2000,  // 0.5 Hz
+        [MSG_MOTOR_I_RIGHT]     = 500,   // 2 Hz
+        [MSG_MOTOR_II_RIGHT]    = 2000,  // 0.5 Hz
+        [MSG_MPPT]              = 1000,  // 1 Hz
+        [MSG_MPPT_STATE]        = 5000,  // 0.2 Hz
+        [MSG_GPS]               = 1000,  // 1 Hz
+        [MSG_INSTRUMENTATION]   = 1000,  // 1 Hz
+        [MSG_TEMPERATURES]      = 10000, // 0.1 Hz
+    };
+
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Delay for 1 second
         
-        bms_can_manager.poll_bms_data(); // Poll BMS data every second
+        static unsigned long last_bms_poll_time = 0;
+        if (millis() - last_bms_poll_time >= 500) {
+            last_bms_poll_time = millis();
+            bms_can_manager.poll_bms_data();
+        }
+
+        message_t message;
+        if (xQueueReceive(can_queue, &message, pdMS_TO_TICKS(20)) == pdTRUE) {
+            // System messages must be converted to CAN messages using conversion functions
+            mavlink_message_t mavlink_msg;
+            if (!mavlink_msg_from_message_t(message, &mavlink_msg)) {
+                DEBUG_PRINTF("[CAN] Failed to convert message from source %s to MAVLink format\n", DATA_SOURCE_NAMES[message.source]);
+                continue; // Skip this message if conversion failed
+            }
+
+            switch (message.source) {
+                case DATA_SOURCE_BMS:
+                case DATA_SOURCE_MOTOR_LEFT:
+                case DATA_SOURCE_MOTOR_RIGHT: {
+                    break; //Skip native CAN messages
+                }  
+                case DATA_SOURCE_GPS: {
+                    if (millis() - last_sent_time[MSG_GPS] >= send_intervals_ms[MSG_GPS]) {
+                        send_mavlink_can_stream(&mavlink_msg);
+                        last_sent_time[MSG_GPS] = millis();
+                    }
+                    break;
+                }
+                 case DATA_SOURCE_MPPT: {
+                    if (millis() - last_sent_time[MSG_MPPT] >= send_intervals_ms[MSG_MPPT]) {
+                        send_mavlink_can_stream(&mavlink_msg);
+                        last_sent_time[MSG_MPPT] = millis();
+                    }
+                    if (millis() - last_sent_time[MSG_MPPT_STATE] >= send_intervals_ms[MSG_MPPT_STATE]) {
+                        send_mavlink_can_stream(&mavlink_msg);
+                        last_sent_time[MSG_MPPT_STATE] = millis();
+                    }
+                    break;
+                }
+                case DATA_SOURCE_INSTRUMENTATION: {
+                    if (millis() - last_sent_time[MSG_INSTRUMENTATION] >= send_intervals_ms[MSG_INSTRUMENTATION]) {
+                        send_mavlink_can_stream(&mavlink_msg);
+                        last_sent_time[MSG_INSTRUMENTATION] = millis();
+                    }
+                    break;
+                }
+                case DATA_SOURCE_TEMPERATURES: {
+                    if (millis() - last_sent_time[MSG_TEMPERATURES] >= send_intervals_ms[MSG_TEMPERATURES]) {
+                        send_mavlink_can_stream(&mavlink_msg);
+                        last_sent_time[MSG_TEMPERATURES] = millis();
+                    }
+                    break;
+                }
+            }
+        }
     }
 }
+
 
 void simple_reception_test() {
     twai_message_t message;
