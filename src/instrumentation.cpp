@@ -387,6 +387,9 @@ void InstrumentationTask(void* parameter) {
         }
         #endif
 
+        //Update last initialization check time
+        last_init_check_time = millis();
+
         #ifndef PROPULSION_BOARD
         // --- Perform measurements and build output string ---
         if (is_currents_adc_initialized && is_currents_cal_loaded) {
@@ -424,11 +427,11 @@ void InstrumentationTask(void* parameter) {
             );
 
         } else {
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Currents Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           currents_adc_address, currents_board_eeprom_address);
+            // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+            //                                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+            //                                "%s[Currents Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
+            //                                (buffer_current_len == 0) ? "" : "\n",
+            //                                currents_adc_address, currents_board_eeprom_address);
         }
 
         if (is_voltages_adc_initialized && is_voltages_cal_loaded) {
@@ -468,11 +471,11 @@ void InstrumentationTask(void* parameter) {
 
 
         } else {
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Voltages Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           voltages_adc_address, voltages_board_eeprom_address);
+            // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+            //                                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+            //                                "%s[Voltages Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
+            //                                (buffer_current_len == 0) ? "" : "\n",
+            //                                voltages_adc_address, voltages_board_eeprom_address);
         }
         
         // --- Readings from Auxiliary Battery Monitor (INA226) ---
@@ -491,11 +494,11 @@ void InstrumentationTask(void* parameter) {
                                            aux_battery_ina226_address,
                                            aux_bus_voltage, aux_current, aux_power);
         } else {
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Aux Battery INA226 (0x%X) not ready.]\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           aux_battery_ina226_address);
+            // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+            //                                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+            //                                "%s[Aux Battery INA226 (0x%X) not ready.]\n",
+            //                                (buffer_current_len == 0) ? "" : "\n",
+            //                                aux_battery_ina226_address);
         }
         #endif
 

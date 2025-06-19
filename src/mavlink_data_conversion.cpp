@@ -2,6 +2,7 @@
 #include "data.hpp"
 #include "arariboat/mavlink.h" // Custom mavlink dialect for the boat generated using Mavgen tool.
 #include <stdbool.h>
+#include "mavlink_data_conversion.h"
 
 #define PRINT_RECEIVED_INFO
 
@@ -523,7 +524,7 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
             temperatures[0] = bms_data.temperature_frame[0].raw_temps[0];
             temperatures[1] = bms_data.temperature_frame[0].raw_temps[1];
 
-            int8_t soc_quick_fix = bms_data.voltage_data.soc_decipercent / 10;
+            int8_t soc_quick_fix = bms_data.voltage_data.soc_decipercent / 10; //!Must fix mavlink dialect to uint16_t and remove this division
 
             // Pack the data into a MAVLink BMS message.
             mavlink_msg_bms_pack(
@@ -620,11 +621,11 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
             instrumentation_data_t inst_data = message.payload.instrumentation;
             mavlink_msg_instrumentation_pack(
                 system_id, component_id, mavlink_msg,
-                message.timestamp.epoch_seconds,
                 inst_data.battery_current_cA,
                 inst_data.motor_current_left_cA,
                 inst_data.motor_current_right_cA,
                 inst_data.mppt_current_cA,
+                inst_data.auxiliary_battery_current_cA,
                 inst_data.battery_voltage_cV,
                 inst_data.auxiliary_battery_voltage_cV,
                 inst_data.irradiance,
@@ -637,11 +638,11 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
             temperature_data_t temp_data = message.payload.temperature;
             mavlink_msg_temperatures_pack(
                 system_id, component_id, mavlink_msg,
-                message.timestamp.epoch_seconds,
                 temp_data.battery_left_cdegC,
                 temp_data.battery_right_cdegC,
                 temp_data.mppt_left_cdegC,
                 temp_data.mppt_right_cdegC,
+                message.timestamp.epoch_seconds,
                 message.timestamp.epoch_ms
             );
             break;
@@ -685,7 +686,7 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
 
             // Populate the voltage and SOC data.
             bms_data->voltage_data.current_deciamps = bms_mavlink_data.current_battery;
-            bms_data->voltage_data.soc_decipercent = bms_mavlink_data.state_of_charge;
+            bms_data->voltage_data.soc_decipercent = bms_mavlink_data.state_of_charge * 10; //! Must fix mavlink dialect to uint16_t and remove this multiplication
             
             // Populate cell voltages.
             for (int i = 0; i < 16; i++) {
@@ -700,7 +701,7 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
             message->timestamp.epoch_seconds = bms_mavlink_data.timestamp_seconds;
             message->timestamp.epoch_ms = bms_mavlink_data.timestamp_milliseconds;
             break;
-        }
+        }  
         case MAVLINK_MSG_ID_BMS_STATUS: {
             // Decode the MAVLink message into a BMS status struct.
             mavlink_bms_status_t bms_status_mavlink_data;
@@ -783,6 +784,71 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
             // Set the timestamp.
             message->timestamp.epoch_seconds = motor_mavlink_data_ii.timestamp_seconds;
             message->timestamp.epoch_ms = motor_mavlink_data_ii.timestamp_milliseconds;
+            break;
+        }
+        case MAVLINK_MSG_ID_GPS: {
+            message->source = DATA_SOURCE_GPS;
+            mavlink_gps_t gps_data;
+            mavlink_msg_gps_decode(mavlink_msg, &gps_data);
+            message->payload.gps.latitude_degE7 = gps_data.latitude;
+            message->payload.gps.longitude_degE7 = gps_data.longitude;
+            message->payload.gps.speed_cm_s = gps_data.speed;
+            message->payload.gps.course = gps_data.course;
+            message->payload.gps.heading = gps_data.heading;
+            message->payload.gps.satellites_visible = gps_data.satellites_visible;
+            message->payload.gps.hdop_deciunits = gps_data.hdop;
+            message->timestamp.epoch_seconds = gps_data.timestamp_seconds;
+            message->timestamp.epoch_ms = gps_data.timestamp_milliseconds;
+            break;
+        }
+        case MAVLINK_MSG_ID_MPPT: {
+            message->source = DATA_SOURCE_MPPT;
+            mavlink_mppt_t mppt_data;
+            mavlink_msg_mppt_decode(mavlink_msg, &mppt_data);
+            message->payload.mppt.electrical.pv_voltage_cV = mppt_data.pv_voltage;
+            message->payload.mppt.electrical.pv_current_cA = mppt_data.pv_current;
+            message->payload.mppt.electrical.battery_voltage_cV = mppt_data.battery_voltage;
+            message->payload.mppt.electrical.battery_current_cA = mppt_data.battery_current;
+            message->timestamp.epoch_seconds = mppt_data.timestamp_seconds;
+            message->timestamp.epoch_ms = mppt_data.timestamp_milliseconds;
+            break;
+        }
+        case MAVLINK_MSG_ID_MPPT_STATE: {
+            message->source = DATA_SOURCE_MPPT;
+            mavlink_mppt_state_t mppt_state_data;
+            mavlink_msg_mppt_state_decode(mavlink_msg, &mppt_state_data);
+            message->payload.mppt.state.battery_status = mppt_state_data.battery_status;
+            message->payload.mppt.state.charging_equipment_status = mppt_state_data.charging_equipment_status;
+            message->timestamp.epoch_seconds = mppt_state_data.timestamp_seconds;
+            message->timestamp.epoch_ms = mppt_state_data.timestamp_milliseconds;
+            break;
+        }
+        case MAVLINK_MSG_ID_INSTRUMENTATION: {
+            message->source = DATA_SOURCE_INSTRUMENTATION;
+            mavlink_instrumentation_t inst_data;
+            mavlink_msg_instrumentation_decode(mavlink_msg, &inst_data);
+            message->payload.instrumentation.battery_current_cA = inst_data.battery_current;
+            message->payload.instrumentation.motor_current_left_cA = inst_data.motor_current_left;
+            message->payload.instrumentation.motor_current_right_cA = inst_data.motor_current_right;
+            message->payload.instrumentation.mppt_current_cA = inst_data.mppt_current;
+            message->payload.instrumentation.auxiliary_battery_current_cA = inst_data.auxiliary_battery_current;
+            message->payload.instrumentation.battery_voltage_cV = inst_data.battery_voltage;
+            message->payload.instrumentation.auxiliary_battery_voltage_cV = inst_data.auxiliary_battery_voltage;
+            message->payload.instrumentation.irradiance = inst_data.irradiance;
+            message->timestamp.epoch_seconds = inst_data.timestamp_seconds;
+            message->timestamp.epoch_ms = inst_data.timestamp_milliseconds;
+            break;
+        }
+        case MAVLINK_MSG_ID_TEMPERATURES: {
+            message->source = DATA_SOURCE_TEMPERATURES;
+            mavlink_temperatures_t temp_data;
+            mavlink_msg_temperatures_decode(mavlink_msg, &temp_data);
+            message->payload.temperature.battery_left_cdegC = temp_data.temperature_battery_left;
+            message->payload.temperature.battery_right_cdegC = temp_data.temperature_battery_right;
+            message->payload.temperature.mppt_left_cdegC = temp_data.temperature_mppt_left;
+            message->payload.temperature.mppt_right_cdegC = temp_data.temperature_mppt_right;
+            message->timestamp.epoch_seconds = temp_data.timestamp_seconds;
+            message->timestamp.epoch_ms = temp_data.timestamp_milliseconds;
             break;
         }
         default:
