@@ -583,6 +583,7 @@ void InstrumentationTask(void* parameter) {
         data.mppt_current_cA = static_cast<int16_t>(current_mppt.value() * 100.0f); // Convert to centiAmperes
         data.battery_voltage_cV = static_cast<uint16_t>(main_battery_voltage.value() * 100.0f); // Convert to centiVolts
         data.auxiliary_battery_voltage_cV = static_cast<uint16_t>(aux_battery_monitor.getBusVoltage() * 100.0f); // Convert to centiVolts
+        data.auxiliary_battery_current_cA = static_cast<int16_t>(aux_battery_monitor.getCurrent() * 100.0f); // Convert to centiAmperes
         data.irradiance = static_cast<uint16_t>(irradiance.value()); // Convert to W/m^2
         data.timestamp_ms = time_boot_ms; // Timestamp in milliseconds
 
