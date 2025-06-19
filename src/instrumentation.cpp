@@ -309,15 +309,18 @@ void InstrumentationTask(void* parameter) {
 
     while (true) {
         
-        vTaskDelay(pdMS_TO_TICKS(20)); // Short delay to allow other tasks to run
+        vTaskDelay(pdMS_TO_TICKS(50)); // Short delay to allow other tasks to run
 
         char instrumentation_debug_buffer[768]; // Increased buffer size for more data
         memset(instrumentation_debug_buffer, 0, sizeof(instrumentation_debug_buffer));
         size_t buffer_current_len = 0;
 
+        static unsigned long last_init_check_time = 0;
+        constexpr unsigned long init_check_interval = 20000; // Quick fix to prevent excessive heap allocations due to failed begin() calls when board is not present
+
         #ifndef PROPULSION_BOARD
         // --- CURRENTS ADC & CALIBRATION ---
-        if (!is_currents_adc_initialized) {
+        if (!is_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
             if (currentsAdc.begin(currents_adc_address)) {
                 DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) successfully initialized.\n", currents_adc_address);
                 currentsAdc.setDataRate(RATE_ADS1115_16SPS);
@@ -338,7 +341,7 @@ void InstrumentationTask(void* parameter) {
         }
 
         // --- VOLTAGES ADC & CALIBRATION ---
-        if (!is_voltages_adc_initialized) {
+        if (!is_voltages_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
             if (voltagesAdc.begin(voltages_adc_address)) {
                 DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) successfully initialized.\n", voltages_adc_address);
                 voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
@@ -359,7 +362,7 @@ void InstrumentationTask(void* parameter) {
         }
 
         // --- AUXILIARY BATTERY MONITOR (INA226) ---
-        if (!is_aux_battery_monitor_initialized) {
+        if (!is_aux_battery_monitor_initialized && (millis() - last_init_check_time > init_check_interval)) {
             if (aux_battery_monitor.begin()) { // Address was set in constructor
                 DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
                 // Configure INA226 (max current, shunt resistance, normalize LSB)
@@ -374,7 +377,7 @@ void InstrumentationTask(void* parameter) {
 
         #ifdef PROPULSION_BOARD
         // --- PROPULSION ADC ---
-        if (!is_propulsion_adc_initialized) {
+        if (!is_propulsion_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
             if (propulsionAdc.begin(propulsion_adc_address)) {
                 DEBUG_PRINTF("\n[ADS]Propulsion ADC (0x%X) successfully initialized.\n", propulsion_adc_address);
                 propulsionAdc.setDataRate(RATE_ADS1115_16SPS);
