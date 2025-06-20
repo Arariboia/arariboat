@@ -316,7 +316,7 @@ void InstrumentationTask(void* parameter) {
         size_t buffer_current_len = 0;
 
         static unsigned long last_init_check_time = 0;
-        constexpr unsigned long init_check_interval = 20000; // Quick fix to prevent excessive heap allocations due to failed begin() calls when board is not present
+        constexpr unsigned long init_check_interval = 1000; // Quick fix to prevent excessive heap allocations due to failed begin() calls when board is not present
 
         #ifndef PROPULSION_BOARD
         // --- CURRENTS ADC & CALIBRATION ---
@@ -340,15 +340,15 @@ void InstrumentationTask(void* parameter) {
             is_currents_cal_loaded = true;
         }
 
-        // --- VOLTAGES ADC & CALIBRATION ---
-        if (!is_voltages_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
-            if (voltagesAdc.begin(voltages_adc_address)) {
-                DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) successfully initialized.\n", voltages_adc_address);
-                voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
-                voltagesAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency with irradiance cal
-                is_voltages_adc_initialized = true;
-            } else { DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) init failed.\n", voltages_adc_address);/* Log failure, non-blocking */ }
-        }
+        // // --- VOLTAGES ADC & CALIBRATION ---
+        // if (!is_voltages_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
+        //     if (voltagesAdc.begin(voltages_adc_address)) {
+        //         DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) successfully initialized.\n", voltages_adc_address);
+        //         voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
+        //         voltagesAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency with irradiance cal
+        //         is_voltages_adc_initialized = true;
+        //     } else { DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) init failed.\n", voltages_adc_address);/* Log failure, non-blocking */ }
+        // }
         
         if (is_voltages_adc_initialized && !is_voltages_cal_loaded) {
             DEBUG_PRINTF("[Calibration] Loading for Voltages Board (EEPROM 0x%X).\n", voltages_board_eeprom_address);
@@ -388,7 +388,7 @@ void InstrumentationTask(void* parameter) {
         #endif
 
         //Update last initialization check time
-        last_init_check_time = millis();
+        // last_init_check_time = millis();
 
         #ifndef PROPULSION_BOARD
         // --- Perform measurements and build output string ---
