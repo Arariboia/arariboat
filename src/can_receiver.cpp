@@ -11,6 +11,7 @@
 #include "queues.hpp"
 #include "arariboat/mavlink.h"
 #include "mavlink_data_conversion.h"
+#include "throttling_config.h"
 
 #ifdef DEBUG
 #undef DEBUG // Uncomment to enable debug messages locally in this file
@@ -23,22 +24,6 @@ BMSCANManager bms_can_manager;
 
 // --- Constants ---
 #define MAVLINK_STREAM_CAN_ID 0xABC // The single CAN ID for streaming all MAVLink messages
-
-// Enum for each MAVLink message type that needs independent throttling.
-enum ThrottledMessage {
-    MSG_BMS,
-    MSG_BMS_STATUS,
-    MSG_MOTOR_I_LEFT,
-    MSG_MOTOR_II_LEFT,
-    MSG_MOTOR_I_RIGHT,
-    MSG_MOTOR_II_RIGHT,
-    MSG_MPPT,
-    MSG_MPPT_STATE,
-    MSG_GPS,
-    MSG_INSTRUMENTATION,
-    MSG_TEMPERATURES,
-    NUM_THROTTLED_MESSAGES // Must be last
-};
 
 /**
  * @brief Serializes a MAVLink message and transmits it as a stream of CAN frames.
@@ -116,23 +101,11 @@ void can_receive_task(void* parameter) {
     }
 }
 
+// This task is responsible for polling BMS data and transmitting messages from the queue.
 void can_transmit_task(void* parameter) {
 
     // Timers for each specific MAVLink message type.
     static uint32_t last_sent_time[NUM_THROTTLED_MESSAGES] = {0};
-    const uint32_t send_intervals_ms[] = {
-        [MSG_BMS]               = 1000,  // 1 Hz
-        [MSG_BMS_STATUS]        = 5000,  // 0.2 Hz
-        [MSG_MOTOR_I_LEFT]      = 500,   // 2 Hz
-        [MSG_MOTOR_II_LEFT]     = 2000,  // 0.5 Hz
-        [MSG_MOTOR_I_RIGHT]     = 500,   // 2 Hz
-        [MSG_MOTOR_II_RIGHT]    = 2000,  // 0.5 Hz
-        [MSG_MPPT]              = 1000,  // 1 Hz
-        [MSG_MPPT_STATE]        = 5000,  // 0.2 Hz
-        [MSG_GPS]               = 1000,  // 1 Hz
-        [MSG_INSTRUMENTATION]   = 1000,  // 1 Hz
-        [MSG_TEMPERATURES]      = 10000, // 0.1 Hz
-    };
 
     while (true) {
         
