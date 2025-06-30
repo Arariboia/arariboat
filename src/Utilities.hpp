@@ -103,7 +103,7 @@ void server_task(void* parameter);
 void SerialTask(void* parameter);
 void TemperatureTask(void* parameter);
 void GPSTask(void* parameter);
-void InstrumentationTask(void* parameter);
+void instrumentation_task(void* parameter);
 void time_manager_task(void* parameter);
 void mppt_task(void *parameters);
 void broker_task(void* parameter);
@@ -130,3 +130,11 @@ inline float LinearCorrection(const float input_value, const float slope, const 
     return slope * input_value + intercept;
 }
 
+/// @brief Checks if a string ends with a newline character.
+/// @param str The string to check.
+/// @return true if the string ends with a newline character, false otherwise.
+inline bool EndsWithNewline(const char* str) {
+    if (str == nullptr) return false;
+    size_t len = strlen(str);
+    return len > 0 && str[len - 1] == '\n';
+}

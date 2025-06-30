@@ -3,6 +3,7 @@
 #include "queues.hpp" // Header file for queue initialization and definitions.
 #include "ESP32Time.h" // Internal RTC timer of ESP32 to keep track of time
 #include "time_manager.h" // Header file for time management tasks.
+#include "esp_console.h" // ESP-IDF console library for command line interface.
 
 //TODO: Improve server interface for configuration and debug purposes.
 //TODO: Implement auxiliary battery and pumps readings using some I2C system  (DONE)
@@ -130,23 +131,37 @@ void setup() {
     initialize_event_loop(&eventLoop); // Initialize the event loop to handle events between tasks.
     initialize_queues(); // Initialize the queues used for inter-task communication.
     system_event_group = xEventGroupCreate(); // Create an event group for system-wide events.
+
+    //Console backend initialization
+    const esp_console_config_t console_config = {
+      .max_cmdline_length = 256,
+      .max_cmdline_args = 8,
+    };
+    ESP_ERROR_CHECK(esp_console_init(&console_config)); // Initialize the console with the specified configuration.
+
+    void register_instrumentation_commands(); // Register commands for instrumentation and debugging.
+    register_instrumentation_commands();
+
+    void register_led_commands(); // Register commands for LED control.
+    register_led_commands();
+
     CREATE_TASK(led_manager_task, STACK_SIZE(2048), PRIORITY(1));
-    // CREATE_TASK(SerialTask, STACK_SIZE(4096), PRIORITY(1));
-    CREATE_TASK(wifi_task, STACK_SIZE(4096), PRIORITY(2));
-    CREATE_TASK(server_task, STACK_SIZE(8096), PRIORITY(3));
+    CREATE_TASK(SerialTask, STACK_SIZE(4096), PRIORITY(1));
+    // CREATE_TASK(wifi_task, STACK_SIZE(4096), PRIORITY(2));
+    // CREATE_TASK(server_task, STACK_SIZE(8096), PRIORITY(3));
     CREATE_TASK(time_manager_task, STACK_SIZE(4096), PRIORITY(1));
-    CREATE_TASK(TemperatureTask, STACK_SIZE(4096), PRIORITY(1));
+    // CREATE_TASK(TemperatureTask, STACK_SIZE(4096), PRIORITY(1));
     // CREATE_TASK(GPSTask, STACK_SIZE(4096), PRIORITY(1));
-    CREATE_TASK(InstrumentationTask, STACK_SIZE(8192), PRIORITY(3));
-    CREATE_TASK(mppt_task, STACK_SIZE(4096), PRIORITY(3));
-    CREATE_TASK(broker_task, STACK_SIZE(4096), PRIORITY(2));
-    CREATE_TASK(can_task, STACK_SIZE(4096), PRIORITY(4)); // Create the CAN task to handle CAN communication.
+    CREATE_TASK(instrumentation_task, STACK_SIZE(8192), PRIORITY(3));
+    // CREATE_TASK(mppt_task, STACK_SIZE(4096), PRIORITY(3));
+    // CREATE_TASK(broker_task, STACK_SIZE(4096), PRIORITY(2));
+    // CREATE_TASK(can_task, STACK_SIZE(4096), PRIORITY(4)); // Create the CAN task to handle CAN communication.
     // CREATE_TASK(propulsion_task, STACK_SIZE(4096), PRIORITY(5)); // Create the propulsion task to handle propulsion system.
 }
 
 void loop() {
 
-    vTaskDelay(pdMS_TO_TICKS(30000));
+    vTaskDelay(pdMS_TO_TICKS(60000));
     print_statistics(); // Print system statistics to the Serial monitor for debugging and performance analysis.
 }
 

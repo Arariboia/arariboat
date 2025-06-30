@@ -1,21 +1,21 @@
 #include <Arduino.h>
 #include "Adafruit_ADS1X15.h"
-#include <SPI.h>
 #include <Wire.h>
-#include "Utilities.hpp"          // Assuming LinearCorrection, STRINGS_ARE_EQUAL, DEBUG_PRINTF
-#include "arariboat/mavlink.h"
-#include "data_instrumentation.h"
+#include "Utilities.hpp"       
 #include "data.hpp"
 #include "INA226.h"
 #include "time_manager.h"
 #include "queues.hpp"
 #include "propulsion_defs.h"
+#include "esp_console.h"
+#include "argtable3/argtable3.h"
 
 typedef Adafruit_ADS1115 ADS1115; //Shorter alias for the ADS1115 class from Adafruit library
 
 // ADC I2C Addresses
 constexpr uint8_t currents_adc_address = 0x48;
-constexpr uint8_t voltages_adc_address = 0x49;
+constexpr uint8_t solar_panel_currents_adc_address = 0x49;
+constexpr uint8_t voltages_adc_address = 0x4A;
 constexpr uint8_t propulsion_adc_address = 0x4B;
 
 // INA226 I2C Address for Auxiliary Battery
@@ -23,8 +23,9 @@ constexpr uint8_t aux_battery_ina226_address = 0x40;
 
 // EEPROM I2C Addresses (MUST BE UNIQUE AND MATCH HARDWARE)
 constexpr uint8_t currents_board_eeprom_address = 0x50;
-constexpr uint8_t voltages_board_eeprom_address = 0x51;
-constexpr uint8_t propulsion_board_eeprom_address = 0x52;
+constexpr uint8_t solar_panel_currents_board_eeprom_address = 0x51;
+constexpr uint8_t voltages_board_eeprom_address = 0x52;
+constexpr uint8_t propulsion_board_eeprom_address = 0x53;
 
 //Time to post data to the system queue
 int time_to_post_data_ms = 250; //for instrumentation data posting
@@ -49,6 +50,7 @@ struct __attribute__((packed)) BoardCalibrationData {
 
 // Global instances for loaded calibrations for each board
 BoardCalibrationData currents_board_cal_data;
+BoardCalibrationData solar_panel_currents_board_cal_data;
 BoardCalibrationData voltages_board_cal_data; 
 BoardCalibrationData propulsion_board_cal_data; 
 
@@ -102,10 +104,10 @@ const BoardCalibrationData DEFAULT_PROPULSION_BOARD_CAL = {
     CALIBRATION_DATA_VERSION, 
     CALIBRATION_VALID_MARKER,
     {
-        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}, // Channel 0
-        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}, // Channel 1
-        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}, // Channel 2
-        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_SLOPE}  // Channel 3
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_INTERCEPT}, // Channel 0
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_INTERCEPT}, // Channel 1
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_INTERCEPT}, // Channel 2
+        {DEFAULT_NEUTRAL_SLOPE, DEFAULT_NEUTRAL_INTERCEPT}  // Channel 3
     }
 };
 
@@ -143,7 +145,7 @@ void load_struct_from_eeprom(T& data_struct, uint8_t eeprom_i2c_address) {
 }
 
 template<typename T>
-void save_struct_to_eeprom(const T& data_struct, uint8_t eeprom_i2c_address) {
+bool save_struct_to_eeprom(const T& data_struct, uint8_t eeprom_i2c_address) {
     const uint8_t* ptr = reinterpret_cast<const uint8_t*>(&data_struct);
     bool all_success = true;
     DEBUG_PRINTF("[Calibration] Saving %zu bytes to EEPROM 0x%X...\n", sizeof(T), eeprom_i2c_address);
@@ -155,8 +157,10 @@ void save_struct_to_eeprom(const T& data_struct, uint8_t eeprom_i2c_address) {
     }
     if (all_success) {
         DEBUG_PRINTF("[Calibration] Saved struct to EEPROM 0x%X successfully.\n", eeprom_i2c_address);
+        return true; // Return true if all bytes were written successfully
     } else {
         DEBUG_PRINTF("[ERROR] Failed to save entire struct to EEPROM 0x%X.\n", eeprom_i2c_address);
+        return false; // Return false if any byte write failed
     }
 }
 
@@ -172,54 +176,6 @@ void initialize_default_calibrations_for_board(BoardCalibrationData& data_struct
 }
 // --- End Calibration Data Management ---
 
-
-static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
-    const char* command = (const char*)event_data;
-    // Unpack handler_args if it becomes a struct with both ADCs and cal_loaded flags
-    ADS1115* currents_adc_ptr = (ADS1115*)handler_args; // Assuming handler_args is still just currentsAdc for simplicity
-
-    if (STRINGS_ARE_EQUAL(command, "adc")) {
-        // This command primarily targets the currentsAdc passed in handler_args
-        // For full access, handler_args would need to be a struct with all ADCs and cal_loaded flags
-        if (!currents_adc_ptr || !currents_board_cal_data.isValidFlag) { // Basic check
-             Serial.printf("[ERROR][CmdCallback] Currents ADC or its calibration not ready for 'adc' command.\n");
-             return;
-        }
-        Serial.printf("\n[Instrumentation][CmdCallback] Reading Currents ADC (0x%X) values (using loaded cal):\n", currents_adc_address);
-        currents_adc_ptr->setGain(GAIN_ONE); 
-        
-        for (uint8_t i = 0; i < MAX_CALIBRATION_PAIRS_PER_BOARD; ++i) {
-            float val = LinearCorrection(currents_adc_ptr->readADC_SingleEnded(i),
-                                         currents_board_cal_data.calibrations[i].slope,
-                                         currents_board_cal_data.calibrations[i].intercept);
-            Serial.printf("[CmdCallback] Ch %d: %.2f (Slope: %.6f, Intercept: %.2f)\n",
-                          i, val,
-                          currents_board_cal_data.calibrations[i].slope,
-                          currents_board_cal_data.calibrations[i].intercept);
-        }
-    } else if (STRINGS_ARE_EQUAL(command, "savecal")) {
-        DEBUG_PRINTF("[Calibration] Cmd 'savecal': Saving Currents Board calibrations to EEPROM 0x%X.\n", currents_board_eeprom_address);
-        save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-        DEBUG_PRINTF("[Calibration] Cmd 'savecal': Saving Voltages Board calibrations to EEPROM 0x%X.\n", voltages_board_eeprom_address);
-        save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
-    } else if (STRINGS_ARE_EQUAL(command, "loaddefcal")) {
-        DEBUG_PRINTF("[Calibration] Cmd 'loaddefcal': Loading default Currents Board calibrations and saving to EEPROM 0x%X.\n", currents_board_eeprom_address);
-        initialize_default_calibrations_for_board(currents_board_cal_data, true);
-        save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-        
-        DEBUG_PRINTF("[Calibration] Cmd 'loaddefcal': Loading default Voltages Board calibrations and saving to EEPROM 0x%X.\n", voltages_board_eeprom_address);
-        initialize_default_calibrations_for_board(voltages_board_cal_data, false);
-        save_struct_to_eeprom(voltages_board_cal_data, voltages_board_eeprom_address);
-    }
-}
-
-// CalculateIrradiance function is no longer needed, LinearCorrection will be used directly.
-
-bool EndsWithNewline(const char* str) { /* ... remains the same ... */ 
-    if (str == nullptr) return false;
-    size_t len = strlen(str);
-    return len > 0 && str[len - 1] == '\n';
-}
 
 bool i2c_scan() { // ... remains the same ...
     bool device_found = false;
@@ -266,22 +222,154 @@ private:
 
 };
 
-void InstrumentationTask(void* parameter) {
+// Command argument structure
+static struct {
+    struct arg_str *board; // Board type (currents, voltages, propulsion)
+    struct arg_int *channel; // Channel number (0-3)
+    struct arg_str *param; // Parameter to set (slope, intercept)
+    struct arg_dbl *value; // Value to set for the parameter
+    struct arg_end *end;
+} set_cal_args;
+
+
+//Handler function that will be executed when "set_cal" is called
+static int handle_set_cal_command(int argc, char **argv) {
+    int nerrors = arg_parse(argc, argv, (void**)&set_cal_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, set_cal_args.end, argv[0]);
+        return 1; // Return error code
+    }
+
+    const char* board_name = set_cal_args.board->sval[0];
+    int channel = set_cal_args.channel->ival[0];
+    const char* param_name = set_cal_args.param->sval[0];
+    float new_value = set_cal_args.value->dval[0];
+
+    printf("Setting calibration for %s board, channel %d, parameter '%s' to %.6f\n",
+           board_name, channel, param_name, new_value);
+
+    BoardCalibrationData* target_cal_data = nullptr;
+    uint8_t target_eeprom_addr = 0;
+
+    if (strcmp(board_name, "currents") == 0) {
+        target_cal_data = &currents_board_cal_data;
+        target_eeprom_addr = currents_board_eeprom_address;
+    } else if (strcmp(board_name, "voltages") == 0) {
+        target_cal_data = &voltages_board_cal_data;
+        target_eeprom_addr = voltages_board_eeprom_address;
+    } else if (strcmp(board_name, "propulsion") == 0) {
+        target_cal_data = &propulsion_board_cal_data;
+        target_eeprom_addr = propulsion_board_eeprom_address;
+    } else {
+        printf("Unknown board type: %s\n", board_name);
+        return 1; // Return error code
+    }
+
+    if (channel < 0 || channel >= MAX_CALIBRATION_PAIRS_PER_BOARD) {
+        printf("Invalid channel number: %d. Must be between 0 and %d.\n", channel, MAX_CALIBRATION_PAIRS_PER_BOARD - 1);
+        return 1; // Return error code
+    }
+
+    if (strcmp(param_name, "slope") == 0) {
+        target_cal_data->calibrations[channel].slope = new_value;
+    } else if (strcmp(param_name, "intercept") == 0) {
+        target_cal_data->calibrations[channel].intercept = new_value;
+    } else {
+        printf("Unknown parameter: %s. Use 'slope' or 'intercept'.\n", param_name);
+        return 1; // Return error code
+    }
+
+    // Save updated calibration data to EEPROM
+    if (!save_struct_to_eeprom(*target_cal_data, target_eeprom_addr)) {
+        printf("Failed to save calibration data to EEPROM 0x%X\n", target_eeprom_addr);
+        return 1; // Return error code
+    }
+    printf("Calibration updated successfully for %s board, channel %d.\n", board_name, channel);
+    printf("New values: Slope=%.6f, Intercept=%.4f\n",
+           target_cal_data->calibrations[channel].slope,
+           target_cal_data->calibrations[channel].intercept);
+
+    return 0; // Return success code
+}
+
+static int handle_get_cal_command(int argc, char **argv) {
+    char buffer[512]; // Buffer to hold the entire output string
+    int len = 0;      // Current length of the string in the buffer
+
+    len += snprintf(buffer + len, sizeof(buffer) - len, "--- Current Calibration Values (from RAM) ---\n");
+
+    // Print Currents Board Calibrations
+    len += snprintf(buffer + len, sizeof(buffer) - len, "Currents Board (EEPROM 0x%X):\n", currents_board_eeprom_address);
+    for (int i = 0; i < MAX_CALIBRATION_PAIRS_PER_BOARD; ++i) {
+        len += snprintf(buffer + len, sizeof(buffer) - len, "  Ch %d: Slope=%.6f, Intercept=%.4f\n", i,
+                        currents_board_cal_data.calibrations[i].slope,
+                        currents_board_cal_data.calibrations[i].intercept);
+    }
+
+    // Print Voltages Board Calibrations
+    len += snprintf(buffer + len, sizeof(buffer) - len, "\nVoltages Board (EEPROM 0x%X):\n", voltages_board_eeprom_address);
+    for (int i = 0; i < MAX_CALIBRATION_PAIRS_PER_BOARD; ++i) {
+        len += snprintf(buffer + len, sizeof(buffer) - len, "  Ch %d: Slope=%.6f, Intercept=%.4f\n", i,
+                        voltages_board_cal_data.calibrations[i].slope,
+                        voltages_board_cal_data.calibrations[i].intercept);
+    }
+
+    printf("%s", buffer); // Print the entire buffer at once
+    return 0;
+}
+
+void register_instrumentation_commands() {
+
+    set_cal_args.board = arg_str1(NULL, NULL, "<board>", "Board type (currents, voltages, propulsion)");
+    set_cal_args.channel = arg_int1(NULL, NULL, "<channel>", "Channel number (0-3)");
+    set_cal_args.param = arg_str1(NULL, NULL, "<param>", "Parameter to set (slope, intercept)");
+    set_cal_args.value = arg_dbl1(NULL, NULL, "<value>", "Value to set for the parameter");
+    set_cal_args.end = arg_end(2); // Allow for 2 additional arguments (board, channel, param, value) 
+
+    const esp_console_cmd_t set_cal_cmd = {
+        .command = "set_cal",
+        .help = "Set calibration parameter for a specific board and channel",
+        .hint = NULL,
+        .func = handle_set_cal_command,
+        .argtable = &set_cal_args
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&set_cal_cmd));
+
+    const esp_console_cmd_t get_cal_cmd = {
+        .command = "get_cal",
+        .help = "Get calibration status for all boards",
+        .hint = NULL,
+        .func = handle_get_cal_command,
+        .argtable = NULL
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&get_cal_cmd));
+}
+
+void instrumentation_task(void* parameter) {
     
+    // Initialize I2C bus
     constexpr gpio_num_t i2c_scl = GPIO_NUM_19;
     constexpr gpio_num_t i2c_sda = GPIO_NUM_21;
-    Wire.begin(i2c_sda, i2c_scl); // Initialize I2C bus
+    Wire.begin(i2c_sda, i2c_scl);
 
+    // Initialize I2C devices
     ADS1115 currentsAdc;
+    ADS1115 solar_panel_currents_adc;
     ADS1115 voltagesAdc;
     ADS1115 propulsionAdc;
     INA226 aux_battery_monitor(aux_battery_ina226_address); // INA226 for auxiliary battery
     
+    // Flags for initialization 
     bool is_currents_adc_initialized = false;
+    bool is_solar_panel_currents_adc_initialized = false;
     bool is_voltages_adc_initialized = false;
     bool is_propulsion_adc_initialized = false; 
+
+    // Flags for calibration data loading
     bool is_currents_cal_loaded = false;
+    bool is_solar_panel_currents_cal_loaded = false;
     bool is_voltages_cal_loaded = false;
+    bool is_propulsion_cal_loaded = false;
     bool is_aux_battery_monitor_initialized = false; // Flag for INA226
 
 
@@ -292,6 +380,12 @@ void InstrumentationTask(void* parameter) {
     LowPassIIR current_motor_left  (filter_alpha); 
     LowPassIIR current_motor_right (filter_alpha); 
     LowPassIIR current_mppt        (filter_alpha); 
+
+    // Solar panel currents measurements
+    LowPassIIR solar_panel_current_one (filter_alpha); 
+    LowPassIIR solar_panel_current_two  (filter_alpha); 
+    LowPassIIR solar_panel_current_three  (filter_alpha); 
+    LowPassIIR solar_panel_current_four(filter_alpha); 
 
     // Voltage board measurements
     LowPassIIR irradiance           (filter_alpha);
@@ -320,35 +414,56 @@ void InstrumentationTask(void* parameter) {
 
         #ifndef PROPULSION_BOARD
         // --- CURRENTS ADC & CALIBRATION ---
-        if (!is_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
-            if (currentsAdc.begin(currents_adc_address)) {
-                DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) successfully initialized.\n", currents_adc_address);
-                currentsAdc.setDataRate(RATE_ADS1115_16SPS);
-                currentsAdc.setGain(GAIN_ONE); 
-                is_currents_adc_initialized = true;
-            } else { DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) init failed.\n", currents_adc_address); /* Log failure, non-blocking */ }
-        }
-
-        if (is_currents_adc_initialized && !is_currents_cal_loaded) {
-            DEBUG_PRINTF("[Calibration] Loading for Currents Board (EEPROM 0x%X).\n", currents_board_eeprom_address);
-            load_struct_from_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-            if (currents_board_cal_data.isValidFlag != CALIBRATION_VALID_MARKER || currents_board_cal_data.version != CALIBRATION_DATA_VERSION) {
-                DEBUG_PRINTF("[Calibration] Invalid/outdated for Currents Board. Loading defaults & saving to EEPROM 0x%X.\n", currents_board_eeprom_address);
-                initialize_default_calibrations_for_board(currents_board_cal_data, true); // True for currents board
-                save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
-            } else { DEBUG_PRINTF("[Calibration] Loaded for Currents Board from EEPROM 0x%X.\n", currents_board_eeprom_address); }
-            is_currents_cal_loaded = true;
-        }
-
-        // // --- VOLTAGES ADC & CALIBRATION ---
-        // if (!is_voltages_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
-        //     if (voltagesAdc.begin(voltages_adc_address)) {
-        //         DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) successfully initialized.\n", voltages_adc_address);
-        //         voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
-        //         voltagesAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency with irradiance cal
-        //         is_voltages_adc_initialized = true;
-        //     } else { DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) init failed.\n", voltages_adc_address);/* Log failure, non-blocking */ }
+        // if (!is_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
+        //     if (currentsAdc.begin(currents_adc_address)) {
+        //         DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) successfully initialized.\n", currents_adc_address);
+        //         currentsAdc.setDataRate(RATE_ADS1115_16SPS);
+        //         currentsAdc.setGain(GAIN_ONE); 
+        //         is_currents_adc_initialized = true;
+        //     } else { DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) init failed.\n", currents_adc_address); /* Log failure, non-blocking */ }
         // }
+
+        // if (is_currents_adc_initialized && !is_currents_cal_loaded) {
+        //     DEBUG_PRINTF("[Calibration] Loading for Currents Board (EEPROM 0x%X).\n", currents_board_eeprom_address);
+        //     load_struct_from_eeprom(currents_board_cal_data, currents_board_eeprom_address);
+        //     if (currents_board_cal_data.isValidFlag != CALIBRATION_VALID_MARKER || currents_board_cal_data.version != CALIBRATION_DATA_VERSION) {
+        //         DEBUG_PRINTF("[Calibration] Invalid/outdated for Currents Board. Loading defaults & saving to EEPROM 0x%X.\n", currents_board_eeprom_address);
+        //         initialize_default_calibrations_for_board(currents_board_cal_data, true); // True for currents board
+        //         save_struct_to_eeprom(currents_board_cal_data, currents_board_eeprom_address);
+        //     } else { DEBUG_PRINTF("[Calibration] Loaded for Currents Board from EEPROM 0x%X.\n", currents_board_eeprom_address); }
+        //     is_currents_cal_loaded = true;
+        // }
+
+        // // --- SOLAR PANEL CURRENTS ADC & CALIBRATION ---
+        // if (!is_solar_panel_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
+        //     if (solar_panel_currents_adc.begin(solar_panel_currents_adc_address)) {
+        //         DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) successfully initialized.\n", solar_panel_currents_adc_address);
+        //         solar_panel_currents_adc.setDataRate(RATE_ADS1115_16SPS);
+        //         solar_panel_currents_adc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency
+        //         is_solar_panel_currents_adc_initialized = true;
+        //     } else { DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) init failed.\n", solar_panel_currents_adc_address); /* Log failure, non-blocking */ }
+        // }
+
+        // if (is_solar_panel_currents_adc_initialized && !is_solar_panel_currents_cal_loaded) {
+        //     DEBUG_PRINTF("[Calibration] Loading for Solar Panel Currents Board (EEPROM 0x%X).\n", solar_panel_currents_board_eeprom_address);
+        //     load_struct_from_eeprom(solar_panel_currents_board_cal_data, solar_panel_currents_board_eeprom_address);
+        //     if (solar_panel_currents_board_cal_data.isValidFlag != CALIBRATION_VALID_MARKER || solar_panel_currents_board_cal_data.version != CALIBRATION_DATA_VERSION) {
+        //         DEBUG_PRINTF("[Calibration] Invalid/outdated for Solar Panel Currents Board. Loading defaults & saving to EEPROM 0x%X.\n", solar_panel_currents_board_eeprom_address);
+        //         initialize_default_calibrations_for_board(solar_panel_currents_board_cal_data, true); // True for currents board
+        //         save_struct_to_eeprom(solar_panel_currents_board_cal_data, solar_panel_currents_board_eeprom_address);
+        //     } else { DEBUG_PRINTF("[Calibration] Loaded for Solar Panel Currents Board from EEPROM 0x%X.\n", solar_panel_currents_board_eeprom_address); }
+        //     is_solar_panel_currents_cal_loaded = true;
+        // }
+
+        // --- VOLTAGES ADC & CALIBRATION ---
+        if (!is_voltages_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
+            if (voltagesAdc.begin(voltages_adc_address)) {
+                DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) successfully initialized.\n", voltages_adc_address);
+                voltagesAdc.setDataRate(RATE_ADS1115_16SPS);
+                voltagesAdc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency with irradiance cal
+                is_voltages_adc_initialized = true;
+            } else { DEBUG_PRINTF("\n[ADS]Voltages ADC (0x%X) init failed.\n", voltages_adc_address);/* Log failure, non-blocking */ }
+        }
         
         if (is_voltages_adc_initialized && !is_voltages_cal_loaded) {
             DEBUG_PRINTF("[Calibration] Loading for Voltages Board (EEPROM 0x%X).\n", voltages_board_eeprom_address);
@@ -361,18 +476,18 @@ void InstrumentationTask(void* parameter) {
             is_voltages_cal_loaded = true;
         }
 
-        // --- AUXILIARY BATTERY MONITOR (INA226) ---
-        if (!is_aux_battery_monitor_initialized && (millis() - last_init_check_time > init_check_interval)) {
-            if (aux_battery_monitor.begin()) { // Address was set in constructor
-                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
-                // Configure INA226 (max current, shunt resistance, normalize LSB)
-                aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
-                is_aux_battery_monitor_initialized = true;
-            } else {
-                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
-                /* Log failure, non-blocking, will retry next loop */
-            }
-        }
+        // // --- AUXILIARY BATTERY MONITOR (INA226) ---
+        // if (!is_aux_battery_monitor_initialized && (millis() - last_init_check_time > init_check_interval)) {
+        //     if (aux_battery_monitor.begin()) { // Address was set in constructor
+        //         DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
+        //         // Configure INA226 (max current, shunt resistance, normalize LSB)
+        //         aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
+        //         is_aux_battery_monitor_initialized = true;
+        //     } else {
+        //         DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
+        //         /* Log failure, non-blocking, will retry next loop */
+        //     }
+        // }
         #endif
 
         #ifdef PROPULSION_BOARD
@@ -433,6 +548,51 @@ void InstrumentationTask(void* parameter) {
             //                                (buffer_current_len == 0) ? "" : "\n",
             //                                currents_adc_address, currents_board_eeprom_address);
         }
+
+        // --- Readings from Solar Panel Currents ADC ---
+        // One current for each string of the solar panel made up of 4 panels (string 0 up to 4)
+        if (is_solar_panel_currents_adc_initialized && is_solar_panel_currents_cal_loaded) {
+
+            int16_t raw_adc_solar_panel_current_one = solar_panel_currents_adc.readADC_SingleEnded(0);
+            int16_t raw_adc_solar_panel_current_two = solar_panel_currents_adc.readADC_SingleEnded(1);
+            int16_t raw_adc_solar_panel_current_three = solar_panel_currents_adc.readADC_SingleEnded(2);
+            int16_t raw_adc_solar_panel_current_four = solar_panel_currents_adc.readADC_SingleEnded(3);
+
+            float solar_panel_current_one_sample = LinearCorrection(raw_adc_solar_panel_current_one, solar_panel_currents_board_cal_data.calibrations[0].slope, solar_panel_currents_board_cal_data.calibrations[0].intercept);
+            float solar_panel_current_two_sample = LinearCorrection(raw_adc_solar_panel_current_two, solar_panel_currents_board_cal_data.calibrations[1].slope, solar_panel_currents_board_cal_data.calibrations[1].intercept);
+            float solar_panel_current_three_sample = LinearCorrection(raw_adc_solar_panel_current_three, solar_panel_currents_board_cal_data.calibrations[2].slope, solar_panel_currents_board_cal_data.calibrations[2].intercept);
+            float solar_panel_current_four_sample = LinearCorrection(raw_adc_solar_panel_current_four, solar_panel_currents_board_cal_data.calibrations[3].slope, solar_panel_currents_board_cal_data.calibrations[3].intercept);
+
+            // Apply low-pass IIR filtering to smooth the readings
+            solar_panel_current_one.filter(solar_panel_current_one_sample);
+            solar_panel_current_two.filter(solar_panel_current_two_sample);
+            solar_panel_current_three.filter(solar_panel_current_three_sample);
+            solar_panel_current_four.filter(solar_panel_current_four_sample);
+
+            buffer_current_len += snprintf(
+                instrumentation_debug_buffer + buffer_current_len,
+                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+                "%s[Solar Panel Currents ADC 0x%X | EEPROM 0x%X]\n"
+                "  String 1 Current: %.2f A (RawADC: %d)\n"
+                "  String 2 Current: %.2f A (RawADC: %d)\n"
+                "  String 3 Current: %.2f A (RawADC: %d)\n"
+                "  String 4 Current: %.2f A (RawADC: %d)\n",
+                (buffer_current_len == 0) ? "" : "\n",
+                solar_panel_currents_adc_address, solar_panel_currents_board_eeprom_address,
+                solar_panel_current_one.value(), raw_adc_solar_panel_current_one,
+                solar_panel_current_two.value(), raw_adc_solar_panel_current_two,
+                solar_panel_current_three.value(), raw_adc_solar_panel_current_three,
+                solar_panel_current_four.value(), raw_adc_solar_panel_current_four
+            );
+
+        } else {
+            // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+            //                                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+            //                                "%s[Solar Panel Currents Board (ADC 0x%X / EEPROM 0x%X) not ready.]\n",
+            //                                (buffer_current_len == 0) ? "" : "\n",
+            //                                solar_panel_currents_adc_address, solar_panel_currents_board_eeprom_address);
+        }
+
 
         if (is_voltages_adc_initialized && is_voltages_cal_loaded) {
 
@@ -590,7 +750,7 @@ void InstrumentationTask(void* parameter) {
         data.irradiance = static_cast<uint16_t>(irradiance.value()); // Convert to W/m^2
         data.timestamp_ms = time_boot_ms; // Timestamp in milliseconds
 
-        msg.timestamp.epoch_ms = get_epoch_seconds();
+        msg.timestamp.epoch_seconds = get_epoch_seconds();
         msg.timestamp.epoch_ms = get_epoch_millis();
         msg.timestamp.time_since_boot_ms = time_boot_ms;
 

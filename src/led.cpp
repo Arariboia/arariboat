@@ -1,5 +1,7 @@
 #include "led.hpp"
 #include "Utilities.hpp" // For DEBUG_PRINTF and other utility macros
+#include "esp_console.h"
+#include "argtable3/argtable3.h"
 
 // #undef DEBUG // Uncomment to enable debug messages locally in this file
 
@@ -34,6 +36,42 @@ BaseType_t led_manager_request_pattern(led_command_t command) {
     }
     // Send the command to the queue. Don't wait if the queue is full.
     return xQueueSend(s_led_command_queue, &command, 0);
+}
+
+void register_led_commands() {
+    //Register the LED commands with the ESP console.
+    const esp_console_cmd_t led_cmds[] = {
+        {
+            .command = "led",
+            .help = "Control the LED patterns.",
+            .hint = NULL,
+            .func = [](int argc, char** argv) -> int {
+                if (argc < 2) {
+                    Serial.println("Usage: led <pattern> [duration_ms] [priority]");
+                    return 0;
+                }
+                led_pattern_id_t pattern = static_cast<led_pattern_id_t>(atoi(argv[1]));
+                uint32_t duration_ms = (argc > 2) ? static_cast<uint32_t>(atoi(argv[2])) : 0;
+                uint8_t priority = (argc > 3) ? static_cast<uint8_t>(atoi(argv[3])) : 0;
+
+                led_command_t command = {pattern, priority, duration_ms};
+                if (led_manager_request_pattern(command) == pdTRUE) {
+                    Serial.printf("LED command queued: Pattern %d, Priority %d, Duration %d ms\n", pattern, priority, duration_ms);
+                } else {
+                    Serial.println("Failed to queue LED command.");
+                }
+                return 0;
+            },
+            .argtable = NULL
+        }
+    };
+
+    for (const auto& cmd : led_cmds) {
+        esp_err_t err = esp_console_cmd_register(&cmd);
+        if (err != ESP_OK) {
+            Serial.printf("[LedManager] Error registering command '%s': %s\n", cmd.command, esp_err_to_name(err));
+        }
+    }
 }
 
 void led_manager_task(void* parameter) {
@@ -71,6 +109,14 @@ void led_manager_task(void* parameter) {
         if (current_command.duration_ms > 0 && (millis() - pattern_start_time_ms > current_command.duration_ms)) {
             // Pattern expired, revert to the default IDLE state.
             current_command = {.pattern = LED_PATTERN_IDLE, .priority = 0, .duration_ms = 0};
+
+            //Check the size of queue and if empty set to idle state
+            UBaseType_t queue_size = uxQueueMessagesWaiting(s_led_command_queue);
+            if (queue_size == 0 && current_command.pattern != LED_PATTERN_IDLE) {
+                // If the queue is empty and we're not in IDLE, revert to IDLE.
+                current_command = {.pattern = LED_PATTERN_IDLE, .priority = 0, .duration_ms = 0};
+                DEBUG_PRINTF("[LedManager] Queue empty, reverting to IDLE state.\n");
+        }
         }
 
         // --- Execute the current pattern's logic ---
@@ -93,14 +139,6 @@ void led_manager_task(void* parameter) {
         if (off_time > 0) {
             digitalWrite(s_led_pin, LOW);
             vTaskDelay(pdMS_TO_TICKS(off_time));
-        }
-
-        //Check the size of queue and if empty set to idle state
-        UBaseType_t queue_size = uxQueueMessagesWaiting(s_led_command_queue);
-        if (queue_size == 0 && current_command.pattern != LED_PATTERN_IDLE) {
-            // If the queue is empty and we're not in IDLE, revert to IDLE.
-            current_command = {.pattern = LED_PATTERN_IDLE, .priority = 0, .duration_ms = 0};
-            DEBUG_PRINTF("[LedManager] Queue empty, reverting to IDLE state.\n");
         }
     }
 }
