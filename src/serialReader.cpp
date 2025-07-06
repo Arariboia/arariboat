@@ -54,7 +54,7 @@ bool TryParseASCIICommand(char input) {
 
 /// @brief Parses the serial input from the user char-by-char and posts the result to the event loop.
 /// The use of the event loop allows the serial parser to be decoupled from the receiver of the parsed data.
-void SerialTask(void *parameter) {
+void uart_task(void *parameter) {
 
     while (true) {
         if (!Serial.available()) {

@@ -12,42 +12,6 @@ static bool time_was_set_by_gps = false; // Flag to check if the time was set by
 
 const int queue_post_interval_ms = 500;
 
-
-static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
-    
-    const char* command = (const char*)event_data;
-
-    if (STRINGS_ARE_EQUAL(command, "gps")) {
-        Serial.printf("\n[GPS]Reading GPS data\n");
-        TinyGPSPlus* gps = (TinyGPSPlus*)handler_args;
-        constexpr float invalid_value = -1.0f; // Begin the fields with arbitrated invalid value and update them if the gps data is valid.
-        float latitude = invalid_value;
-        float longitude = invalid_value;
-        float speed = invalid_value;
-        float course = invalid_value;
-        uint8_t satellites = 0;
-
-        if (gps->location.isValid()) {
-            latitude = gps->location.lat();
-            longitude = gps->location.lng();
-            Serial.printf("[GPS]Latitude: %f, Longitude: %f\n", latitude, longitude);
-        }
-        if (gps->speed.isValid()) { 
-            speed = gps->speed.kmph();
-            Serial.printf("[GPS]Speed: %f\n", speed);
-        }
-        if (gps->course.isValid()) {
-            course = gps->course.deg();
-            Serial.printf("[GPS]Course: %f\n", course);
-        }
-        if (gps->satellites.isValid()) {
-            satellites = gps->satellites.value();
-            Serial.printf("[GPS]Satellites: %d\n", satellites);
-        }
-
-    }
-}
-
 #define SECONDS(x) (x*1000)
 static void PrintPosition(float latitude, float longitude, int interval) {
     static unsigned long lastPrint = 0;
@@ -101,9 +65,6 @@ void GPSTask(void* parameter) {
     constexpr uint8_t pin_gps_tx = PIN_GPS_TX; 
     constexpr int32_t baud_rate = 9600; // Fixed baud rate used by NEO-6M GPS module
     Serial2.begin(baud_rate, SERIAL_8N1, pin_gps_rx, pin_gps_tx);
-
-    //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &gps); 
 
     while (true) {
 

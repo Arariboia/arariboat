@@ -56,16 +56,6 @@ void ScanProbeAddresses(DallasTemperature &probes) {
     #endif
 }
 
-static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
-    
-    const char* command = (const char*)event_data;
-
-    if (STRINGS_ARE_EQUAL(command, "temperature")) {
-        Serial.printf("\n[Temperature]: Scanning for new probes\n");
-        ScanProbeAddresses(*((DallasTemperature*)handler_args));
-    }
-}
-
 static void PrintDebugTemperature(float battery_left, float battery_right, float mppt_left, float mppt_right) {
     static unsigned long last_print_time = 0;
     if (millis() - last_print_time < 5000) {
@@ -151,9 +141,6 @@ void TemperatureTask(void* parameter) {
     DeviceAddress thermal_probe_mppt_right = {S5};
     DeviceAddress thermal_probe_battery_left = {S6};
     DeviceAddress thermal_probe_battery_right = {S4};
-
-    //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, &probes);
 
     while (true) {
         // PrintAllDetectedTemperatures(probes); // Generic function to print temperatures from any connected sensor

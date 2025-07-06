@@ -7,16 +7,6 @@
 #include "Utilities.hpp" // Custom utility macros and functions.
 #include "time_manager.h" // Header file for time management tasks.
 
-static void commandCallback(void* handler_args, esp_event_base_t base, int32_t id, void* event_data) {
-    
-    const char* command = (const char*)event_data;
-
-    if (STRINGS_ARE_EQUAL(command, "wifi")) {
-        Serial.printf("\n[WIFI]Reading WiFi data\n");
-        Serial.printf("\n[WIFI]Connected to %s with IP address %s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
-    }
-}
-
 void wifi_task(void* parameter) {
     
     std::unordered_map<const char*, const char*> wifiCredentials;
@@ -32,9 +22,6 @@ void wifi_task(void* parameter) {
             break;
         }
     });
-
-    //Register serial callback commands
-    esp_event_handler_register_with(eventLoop, COMMAND_BASE, ESP_EVENT_ANY_ID, commandCallback, nullptr); 
     
     while (true) {
 
