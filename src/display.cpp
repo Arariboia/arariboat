@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <TFT_eWidget.h>
-#include "Utilities.hpp"
 
 // For some reason, the display gets a bug if I declare the display objects inside the task, so I declare them here
 // with static storage duration instead of using the default thread storage duration of the task.
@@ -55,7 +54,7 @@ void CockpitDisplayTask(void* parameter) {
     widget_mppt_current.analogMeter(240, 180, mppt_amps_zero_scale, mppt_amps_full_scale, "A", "0", "10", "20", "30", "40"); 
   
     while (true) {
-        constexpr int loop_period = 500; 
+        constexpr int loop_period_ms = 10; 
         static uint32_t update_time = 0;  
 
         auto test_sine_wave = [&]() {
@@ -63,7 +62,7 @@ void CockpitDisplayTask(void* parameter) {
             static float angle = 0.0f;
             constexpr float radians_to_degrees = 3.14159265358979323846 / 180.0;
 
-            if (millis() - test_update_time > loop_period) {
+            if (millis() - test_update_time > loop_period_ms) {
                 test_update_time = millis();
                 angle += 4; if (angle > 360) angle = 0;
 
@@ -92,21 +91,7 @@ void CockpitDisplayTask(void* parameter) {
             }
         };
 
-        // Use data from SystemData static class to update the display
-
-        auto update_display = [&]() {
-            if (millis() - update_time > loop_period) {
-                update_time = millis();
-
-                widget_battery_volts.updateNeedle(SystemData::getInstance().all_info.battery_voltage, 0);
-                widget_battery_current.updateNeedle(SystemData::getInstance().all_info.motor_current_left, 0);
-                widget_motor_current.updateNeedle(SystemData::getInstance().all_info.motor_current_right, 0);
-                widget_mppt_current.updateNeedle(SystemData::getInstance().all_info.mppt_current, 0);
-            }
-        };
-
-        //update_display();
         test_sine_wave();
-        vTaskDelay(pdMS_TO_TICKS(loop_period));
+        vTaskDelay(pdMS_TO_TICKS(loop_period_ms));
     }
 }
