@@ -137,7 +137,7 @@ inline bool EndsWithNewline(const char* str) {
  * - Current Task's Stack Usage (High Water Mark)
  * * It is a valuable tool for debugging performance and memory issues.
  */
-void print_statistics() {
+inline void print_statistics() {
   // Use a single, large buffer to format the entire string. This makes the
   // function safer to call from different tasks, as the entire block of text
   // will be sent to the Serial port in one go, preventing interleaved messages.
