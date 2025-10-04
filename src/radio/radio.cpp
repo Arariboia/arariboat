@@ -137,6 +137,13 @@ void radio_receiver(void) {
             
             DEBUG_PRINTF("[RADIO] Processing packet. Size: %d, RSSI: %d dBm\n", rx_packet.len, rx_packet.rssi);
 
+            // Print raw data in hex for debugging
+            // char buffer[256] = {0};
+            // for (int i = 0; i < rx_packet.len; i++) {
+            //     sprintf(buffer + strlen(buffer), "%02X ", rx_packet.buffer[i]);
+            // }
+            // DEBUG_PRINTF("[RADIO] Raw Data: %s\n", buffer);
+
             // Process every byte in the received packet.
             for (int i = 0; i < rx_packet.len; i++) {
                 // The mavlink_parse_char function attempts to build a MAVLink message byte by byte.
@@ -159,7 +166,7 @@ void radio_receiver(void) {
                     #endif
                     Serial.println(); // New line for better readability in the console.
 
-                    //Route the received raw mavlink message to the console for the dashboard.
+                    // Route the received raw mavlink message to the console for the dashboard.
                     uint8_t buffer[MAVLINK_MAX_PACKET_LEN] = {0};
                     uint16_t len = mavlink_msg_to_send_buffer(buffer, &mavlink_msg);
                     Serial.write(buffer, len);

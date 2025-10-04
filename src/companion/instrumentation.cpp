@@ -477,17 +477,17 @@ void instrumentation_task(void* parameter) {
         }
 
         // // --- AUXILIARY BATTERY MONITOR (INA226) ---
-        // if (!is_aux_battery_monitor_initialized && (millis() - last_init_check_time > init_check_interval)) {
-        //     if (aux_battery_monitor.begin()) { // Address was set in constructor
-        //         DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
-        //         // Configure INA226 (max current, shunt resistance, normalize LSB)
-        //         aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
-        //         is_aux_battery_monitor_initialized = true;
-        //     } else {
-        //         DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
-        //         /* Log failure, non-blocking, will retry next loop */
-        //     }
-        // }
+        if (!is_aux_battery_monitor_initialized && (millis() - last_init_check_time > init_check_interval)) {
+            if (aux_battery_monitor.begin()) { // Address was set in constructor
+                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) successfully initialized.\n", aux_battery_ina226_address);
+                // Configure INA226 (max current, shunt resistance, normalize LSB)
+                aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
+                is_aux_battery_monitor_initialized = true;
+            } else {
+                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
+                /* Log failure, non-blocking, will retry next loop */
+            }
+        }
         #endif
 
         #ifdef PROPULSION_BOARD
@@ -641,8 +641,7 @@ void instrumentation_task(void* parameter) {
         // --- Readings from Auxiliary Battery Monitor (INA226) ---
         if (is_aux_battery_monitor_initialized) {
             float aux_bus_voltage = aux_battery_monitor.getBusVoltage();
-            // Apply the specific calibration for current: * 0.786f + 8.48E-3f
-            float aux_current = aux_battery_monitor.getCurrent() * 0.786f + 0.00848f; 
+            float aux_current = LinearCorrection(aux_battery_monitor.getCurrent(), 0.8029673f, 0.0f); // Adjust slope and intercept as needed
             float aux_power = aux_battery_monitor.getPower();
             // float aux_shunt_voltage_mv = aux_battery_monitor.getShuntVoltage_mV(); // Optional for debugging
 
