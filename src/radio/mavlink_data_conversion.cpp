@@ -530,8 +530,6 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
                 temperatures[0] = bms_data.temperature_frame[0].raw_temps[0];
                 temperatures[1] = bms_data.temperature_frame[0].raw_temps[1];
 
-                int8_t soc_quick_fix = bms_data.voltage_data.soc_decipercent / 10; //!Must fix mavlink dialect to uint16_t and remove this division
-
                 // Pack the data into a MAVLink BMS message.
                 mavlink_msg_bms_pack(
                     system_id,
@@ -540,7 +538,7 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
                     voltages,
                     temperatures,
                     bms_data.voltage_data.current_deciamps,
-                    soc_quick_fix,
+                    bms_data.voltage_data.soc_decipercent,
                     message.timestamp.epoch_seconds,
                     message.timestamp.epoch_ms
                 );
@@ -610,8 +608,8 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
                     system_id,
                     component_id,
                     mavlink_msg,
-                    motor_data.state_data.controller_temp_C + 40, // Adjusted for encoding
-                    motor_data.state_data.motor_temp_C + 40, // Adjusted for encoding
+                    motor_data.state_data.controller_temp_C,
+                    motor_data.state_data.motor_temp_C,
                     motor_data.state_data.status,
                     (uint8_t)(motor_data.state_data.error & 0xFF),
                     (uint8_t)((motor_data.state_data.error >> 8) & 0xFF),
@@ -742,7 +740,7 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
 
             // Populate the voltage and SOC data.
             bms_data->voltage_data.current_deciamps = bms_mavlink_data.current_battery;
-            bms_data->voltage_data.soc_decipercent = bms_mavlink_data.state_of_charge * 10; //! Must fix mavlink dialect to uint16_t and remove this multiplication
+            bms_data->voltage_data.soc_decipercent = bms_mavlink_data.state_of_charge; 
             
             // Populate cell voltages.
             for (int i = 0; i < 16; i++) {
