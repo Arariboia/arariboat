@@ -14,8 +14,8 @@ typedef Adafruit_ADS1115 ADS1115; //Shorter alias for the ADS1115 class from Ada
 
 // ADC I2C Addresses
 constexpr uint8_t currents_adc_address = 0x48;
-constexpr uint8_t solar_panel_currents_adc_address = 0x49;
-constexpr uint8_t voltages_adc_address = 0x4A;
+constexpr uint8_t solar_panel_currents_adc_address = 0x4A;
+constexpr uint8_t voltages_adc_address = 0x49;
 constexpr uint8_t propulsion_adc_address = 0x4B;
 
 // INA226 I2C Address for Auxiliary Battery
@@ -405,7 +405,7 @@ void instrumentation_task(void* parameter) {
         
         vTaskDelay(pdMS_TO_TICKS(50)); // Short delay to allow other tasks to run
 
-        char instrumentation_debug_buffer[768]; // Increased buffer size for more data
+        char instrumentation_debug_buffer[1024]; // Increased buffer size for more data
         memset(instrumentation_debug_buffer, 0, sizeof(instrumentation_debug_buffer));
         size_t buffer_current_len = 0;
 
@@ -434,15 +434,15 @@ void instrumentation_task(void* parameter) {
         //     is_currents_cal_loaded = true;
         // }
 
-        // // --- SOLAR PANEL CURRENTS ADC & CALIBRATION ---
-        // if (!is_solar_panel_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
-        //     if (solar_panel_currents_adc.begin(solar_panel_currents_adc_address)) {
-        //         DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) successfully initialized.\n", solar_panel_currents_adc_address);
-        //         solar_panel_currents_adc.setDataRate(RATE_ADS1115_16SPS);
-        //         solar_panel_currents_adc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency
-        //         is_solar_panel_currents_adc_initialized = true;
-        //     } else { DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) init failed.\n", solar_panel_currents_adc_address); /* Log failure, non-blocking */ }
-        // }
+        // --- SOLAR PANEL CURRENTS ADC & CALIBRATION ---
+        if (!is_solar_panel_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
+            if (solar_panel_currents_adc.begin(solar_panel_currents_adc_address)) {
+                DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) successfully initialized.\n", solar_panel_currents_adc_address);
+                solar_panel_currents_adc.setDataRate(RATE_ADS1115_16SPS);
+                solar_panel_currents_adc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency
+                is_solar_panel_currents_adc_initialized = true;
+            } else { DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) init failed.\n", solar_panel_currents_adc_address); /* Log failure, non-blocking */ }
+        }
 
         // if (is_solar_panel_currents_adc_initialized && !is_solar_panel_currents_cal_loaded) {
         //     DEBUG_PRINTF("[Calibration] Loading for Solar Panel Currents Board (EEPROM 0x%X).\n", solar_panel_currents_board_eeprom_address);
@@ -551,17 +551,22 @@ void instrumentation_task(void* parameter) {
 
         // --- Readings from Solar Panel Currents ADC ---
         // One current for each string of the solar panel made up of 4 panels (string 0 up to 4)
-        if (is_solar_panel_currents_adc_initialized && is_solar_panel_currents_cal_loaded) {
+        if (is_solar_panel_currents_adc_initialized) {
 
             int16_t raw_adc_solar_panel_current_one = solar_panel_currents_adc.readADC_SingleEnded(0);
             int16_t raw_adc_solar_panel_current_two = solar_panel_currents_adc.readADC_SingleEnded(1);
             int16_t raw_adc_solar_panel_current_three = solar_panel_currents_adc.readADC_SingleEnded(2);
             int16_t raw_adc_solar_panel_current_four = solar_panel_currents_adc.readADC_SingleEnded(3);
 
-            float solar_panel_current_one_sample = LinearCorrection(raw_adc_solar_panel_current_one, solar_panel_currents_board_cal_data.calibrations[0].slope, solar_panel_currents_board_cal_data.calibrations[0].intercept);
-            float solar_panel_current_two_sample = LinearCorrection(raw_adc_solar_panel_current_two, solar_panel_currents_board_cal_data.calibrations[1].slope, solar_panel_currents_board_cal_data.calibrations[1].intercept);
-            float solar_panel_current_three_sample = LinearCorrection(raw_adc_solar_panel_current_three, solar_panel_currents_board_cal_data.calibrations[2].slope, solar_panel_currents_board_cal_data.calibrations[2].intercept);
-            float solar_panel_current_four_sample = LinearCorrection(raw_adc_solar_panel_current_four, solar_panel_currents_board_cal_data.calibrations[3].slope, solar_panel_currents_board_cal_data.calibrations[3].intercept);
+            if (raw_adc_solar_panel_current_one < 0) raw_adc_solar_panel_current_one = 0;
+            if (raw_adc_solar_panel_current_two < 0) raw_adc_solar_panel_current_two = 0;
+            if (raw_adc_solar_panel_current_three < 0) raw_adc_solar_panel_current_three = 0;
+            if (raw_adc_solar_panel_current_four < 0) raw_adc_solar_panel_current_four = 0;
+
+            float solar_panel_current_one_sample = LinearCorrection(raw_adc_solar_panel_current_one, 0.00127845f, 0.05794420f);
+            float solar_panel_current_two_sample = LinearCorrection(raw_adc_solar_panel_current_two, 0.00125236f, -0.00681739f);
+            float solar_panel_current_three_sample = LinearCorrection(raw_adc_solar_panel_current_three, 0.00129539f, -0.01401884f);
+            float solar_panel_current_four_sample = LinearCorrection(raw_adc_solar_panel_current_four, 0.00125432f, 0.03105314f);
 
             // Apply low-pass IIR filtering to smooth the readings
             solar_panel_current_one.filter(solar_panel_current_one_sample);
@@ -758,6 +763,24 @@ void instrumentation_task(void* parameter) {
             DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
         } 
         #endif 
+
+        message_t msg_strings;
+        msg_strings.source = DATA_SOURCE_MPPT_STRINGS;
+        auto& data_strings = msg.payload.mppt_strings;
+        data_strings.string_1 = static_cast<uint16_t>(abs(solar_panel_current_one.value()) * 1000.0f); // Convert to milliAmperes
+        data_strings.string_2 = static_cast<uint16_t>(abs(solar_panel_current_two.value()) * 1000.0f); // Convert to milliAmperes
+        data_strings.string_3 = static_cast<uint16_t>(abs(solar_panel_current_three.value()) * 1000.0f); // Convert to milliAmperes
+        data_strings.string_4 = static_cast<uint16_t>(abs(solar_panel_current_four.value()) * 1000.0f); // Convert to milliAmperes
+        data_strings.timestamp_ms = time_boot_ms; // Timestamp in milliseconds
+
+        msg_strings.timestamp.epoch_seconds = get_epoch_seconds();
+        msg_strings.timestamp.epoch_ms = get_epoch_millis();
+        msg_strings.timestamp.time_since_boot_ms = time_boot_ms;
+
+        //Send the message to the broker
+        if (xQueueSend(broker_queue, &msg_strings, pdMS_TO_TICKS(20)) != pdTRUE) {
+            DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
+        } 
 
         // Propulsion data message
         #ifdef PROPULSION_BOARD

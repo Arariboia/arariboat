@@ -24,7 +24,8 @@ typedef enum {
     DATA_SOURCE_MPPT,
     DATA_SOURCE_INSTRUMENTATION,
     DATA_SOURCE_PROPULSION,
-    DATA_SOURCE_TEMPERATURES 
+    DATA_SOURCE_TEMPERATURES,
+    DATA_SOURCE_MPPT_STRINGS
 } data_source_t;
 
 //This must be kept in sync and in the same order as the data_source_t enum
@@ -36,7 +37,8 @@ const char* const DATA_SOURCE_NAMES[] = {
     "MPPT",
     "Instrumentation",
     "Propulsion",
-    "Temperatures"
+    "Temperatures",
+    "MPPT Strings"
 };
 
 typedef struct {
@@ -49,6 +51,7 @@ typedef struct {
         instrumentation_data_t instrumentation;
         propulsion_data_t propulsion;
         temperature_data_t temperature;
+        mppt_strings_data_t mppt_strings;
     } payload;
     
     timestamp_data_t timestamp; // Timestamp data for when the message was created
