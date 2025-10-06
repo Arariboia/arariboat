@@ -558,15 +558,15 @@ void instrumentation_task(void* parameter) {
             int16_t raw_adc_solar_panel_current_three = solar_panel_currents_adc.readADC_SingleEnded(2);
             int16_t raw_adc_solar_panel_current_four = solar_panel_currents_adc.readADC_SingleEnded(3);
 
-            if (raw_adc_solar_panel_current_one < 0) raw_adc_solar_panel_current_one = 0;
-            if (raw_adc_solar_panel_current_two < 0) raw_adc_solar_panel_current_two = 0;
-            if (raw_adc_solar_panel_current_three < 0) raw_adc_solar_panel_current_three = 0;
-            if (raw_adc_solar_panel_current_four < 0) raw_adc_solar_panel_current_four = 0;
-
             float solar_panel_current_one_sample = LinearCorrection(raw_adc_solar_panel_current_one, 0.00127845f, 0.05794420f);
-            float solar_panel_current_two_sample = LinearCorrection(raw_adc_solar_panel_current_two, 0.00125236f, -0.00681739f);
+            float solar_panel_current_two_sample = LinearCorrection(raw_adc_solar_panel_current_two, 0.00125110f, 0.00014580f);
             float solar_panel_current_three_sample = LinearCorrection(raw_adc_solar_panel_current_three, 0.00129539f, -0.01401884f);
-            float solar_panel_current_four_sample = LinearCorrection(raw_adc_solar_panel_current_four, 0.00125432f, 0.03105314f);
+            float solar_panel_current_four_sample = LinearCorrection(raw_adc_solar_panel_current_four, 0.00125432f, 0.03105315f);
+
+            if(solar_panel_current_one_sample < 0) solar_panel_current_one_sample = 0;
+            if(solar_panel_current_two_sample < 0) solar_panel_current_two_sample = 0;
+            if(solar_panel_current_three_sample < 0) solar_panel_current_three_sample = 0;
+            if(solar_panel_current_four_sample < 0) solar_panel_current_four_sample = 0;
 
             // Apply low-pass IIR filtering to smooth the readings
             solar_panel_current_one.filter(solar_panel_current_one_sample);

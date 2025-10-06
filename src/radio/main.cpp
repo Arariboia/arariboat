@@ -41,8 +41,8 @@ void setup() {
     system_event_group = xEventGroupCreate(); // Create an event group for system-wide events.
     CREATE_TASK(broker_task, STACK_SIZE(16384), PRIORITY(2));
     CREATE_TASK(serial_reader_task, STACK_SIZE(8192), PRIORITY(1));
-    CREATE_TASK(wifi_task, STACK_SIZE(4096), PRIORITY(1));
-    CREATE_TASK(server_task, STACK_SIZE(4096), PRIORITY(1));
+    // CREATE_TASK(wifi_task, STACK_SIZE(4096), PRIORITY(1));
+    // CREATE_TASK(server_task, STACK_SIZE(4096), PRIORITY(1));
     initialize_flash_memory();
     // CREATE_TASK(flashcard_reader_task, STACK_SIZE(8192), PRIORITY(1));
     #ifdef TRANSMITTER
