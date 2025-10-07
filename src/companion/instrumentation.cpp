@@ -399,6 +399,10 @@ void instrumentation_task(void* parameter) {
     LowPassIIR throttle_left_potentiometer      (filter_alpha);
     LowPassIIR throttle_right_potentiometer     (filter_alpha);
 
+    // Auxiliary battery measurements
+    LowPassIIR auxiliary_battery_voltage (filter_alpha);
+    LowPassIIR auxiliary_battery_current (filter_alpha);
+
     DEBUG_PRINTF("[Instrumentation] Starting main measurement loop.\n");
 
     while (true) {
@@ -650,13 +654,16 @@ void instrumentation_task(void* parameter) {
             float aux_power = aux_battery_monitor.getPower();
             // float aux_shunt_voltage_mv = aux_battery_monitor.getShuntVoltage_mV(); // Optional for debugging
 
+            float filtered_aux_battery_voltage = auxiliary_battery_voltage.filter(aux_bus_voltage);
+            float filtered_aux_battery_current = auxiliary_battery_current.filter(aux_current);
+
             buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
                                            sizeof(instrumentation_debug_buffer) - buffer_current_len,
                                            "%s[Aux Battery INA226 0x%X]\n"
                                            "  Aux V: %.2fV, Aux I: %.3fA, Aux P: %.2fW\n",
                                            (buffer_current_len == 0) ? "" : "\n",
                                            aux_battery_ina226_address,
-                                           aux_bus_voltage, aux_current, aux_power);
+                                           filtered_aux_battery_voltage, filtered_aux_battery_current, aux_power);
         } else {
             // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
             //                                sizeof(instrumentation_debug_buffer) - buffer_current_len,
@@ -749,8 +756,8 @@ void instrumentation_task(void* parameter) {
         data.motor_current_right_cA = static_cast<int16_t>(current_motor_right.value() * 100.0f); // Convert to centiAmperes
         data.mppt_current_cA = static_cast<int16_t>(current_mppt.value() * 100.0f); // Convert to centiAmperes
         data.battery_voltage_cV = static_cast<uint16_t>(main_battery_voltage.value() * 100.0f); // Convert to centiVolts
-        data.auxiliary_battery_voltage_cV = static_cast<uint16_t>(aux_battery_monitor.getBusVoltage() * 100.0f); // Convert to centiVolts
-        data.auxiliary_battery_current_cA = static_cast<int16_t>(aux_battery_monitor.getCurrent() * 100.0f); // Convert to centiAmperes
+        data.auxiliary_battery_voltage_cV = static_cast<uint16_t>(auxiliary_battery_voltage.value() * 100.0f); // Convert to centiVolts
+        data.auxiliary_battery_current_cA = static_cast<int16_t>(auxiliary_battery_current.value() * 100.0f); // Convert to centiAmperes
         data.irradiance = static_cast<uint16_t>(irradiance.value()); // Convert to W/m^2
         data.timestamp_ms = time_boot_ms; // Timestamp in milliseconds
 
