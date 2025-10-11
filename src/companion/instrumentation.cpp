@@ -348,8 +348,8 @@ void register_instrumentation_commands() {
 void instrumentation_task(void* parameter) {
     
     // Initialize I2C bus
-    constexpr gpio_num_t i2c_scl = GPIO_NUM_19;
-    constexpr gpio_num_t i2c_sda = GPIO_NUM_21;
+    constexpr gpio_num_t i2c_scl = PIN_SCL;
+    constexpr gpio_num_t i2c_sda = PIN_SDA;
     Wire.begin(i2c_sda, i2c_scl);
 
     // Initialize I2C devices
