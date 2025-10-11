@@ -375,11 +375,11 @@ void instrumentation_task(void* parameter) {
 
     float filter_alpha = 0.7f; // Smoothing factor. Percentage of previous data to use for smoothing (0.0 to 1.0)
 
-    // Current board measurements
-    LowPassIIR battery_current     (filter_alpha); 
-    LowPassIIR current_motor_left  (filter_alpha); 
-    LowPassIIR current_motor_right (filter_alpha); 
-    LowPassIIR current_mppt        (filter_alpha); 
+    // Current board measurements                   //  08/10/2025          Expected currents
+    LowPassIIR battery_current     (filter_alpha);  //  T201DC-100 100ohms  20mA*100ohms = 2V @ 100A
+    LowPassIIR current_motor_left  (filter_alpha);  //  LA-200P    62 ohms  40mA*62ohms  = 2.48V @ 40A
+    LowPassIIR current_motor_right (filter_alpha);  //  LA-200P    62 ohms  40mA*62ohms  = 2.48V @ 40A
+    LowPassIIR current_mppt        (filter_alpha);  //  LA-55P     82 ohms  20mA*82ohms  = 1.64V @ 20A
 
     // Solar panel currents measurements
     LowPassIIR solar_panel_current_one (filter_alpha); 
