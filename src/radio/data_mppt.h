@@ -25,12 +25,3 @@ typedef struct {
     mppt_state_data_t      state;
     uint32_t               timestamp_ms;
 } mppt_data_t;
-
-// Holds current data from solar panel strings
-typedef struct {
-    uint16_t string_1;
-    uint16_t string_2;
-    uint16_t string_3;
-    uint16_t string_4;
-    uint32_t timestamp_ms;
-} mppt_strings_data_t;

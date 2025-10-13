@@ -17,7 +17,6 @@ enum ThrottledMessage {
     MSG_GPS,
     MSG_INSTRUMENTATION,
     MSG_TEMPERATURES,
-    MSG_STRINGS_MPPT,
     NUM_THROTTLED_MESSAGES // Must be last, provides the size of the enum.
 };
 
@@ -35,7 +34,6 @@ const uint32_t send_intervals_ms[] = {
     [MSG_GPS]               = 1000,  // 1 Hz
     [MSG_INSTRUMENTATION]   = 1000,  // 1 Hz
     [MSG_TEMPERATURES]      = 10000, // 0.1 Hz
-    [MSG_STRINGS_MPPT]       = 200,  // 5 Hz
 };
 
 
@@ -52,7 +50,6 @@ const data_source_t throttled_message_sources[] = {
     [MSG_GPS] = DATA_SOURCE_GPS,
     [MSG_INSTRUMENTATION] = DATA_SOURCE_INSTRUMENTATION,
     [MSG_TEMPERATURES] = DATA_SOURCE_TEMPERATURES,
-    [MSG_STRINGS_MPPT] = DATA_SOURCE_MPPT_STRINGS,
 }; 
 
 // Function to get the data source for a given ThrottledMessage enum value.
