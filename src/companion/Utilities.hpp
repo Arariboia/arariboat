@@ -107,6 +107,7 @@ void mppt_task(void *parameters);
 void broker_task(void* parameter);
 void led_manager_task(void* parameter);
 void can_task(void* parameter);
+void mqtt_task(void* parameter);
 
 
 /// @brief Calibrates a reading by using a linear equation obtained by comparing the readings with a multimeter.

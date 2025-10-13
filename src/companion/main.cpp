@@ -55,7 +55,8 @@ void setup() {
     CREATE_TASK(broker_task, STACK_SIZE(4096), PRIORITY(2));
     CREATE_TASK(can_task, STACK_SIZE(4096), PRIORITY(4)); // Create the CAN task to handle CAN communication.
     // CREATE_TASK(propulsion_task, STACK_SIZE(4096), PRIORITY(5)); // Create the propulsion task to handle propulsion system.
-}
+    // CREATE_TASK(mqtt_task, STACK_SIZE(8192), PRIORITY(2)); // Create the MQTT task to handle MQTT communication.
+  }
 
 void loop() {
 
