@@ -34,12 +34,13 @@ bool GenerateMavlinkMessage(mavlink_message_t& message, int message_id) {
     switch (message_id) {
 
         case MAVLINK_MSG_ID_INSTRUMENTATION: {
-            mavlink_msg_instrumentation_pack(system_id, component_id, &message, 1500, 1000, 1001, 500, 100, 4800, 1200, 800, NO_TIMESTAMP, 0);
+            uint16_t temps[4] = {50, 60, 70, 90};
+            mavlink_msg_instrumentation_pack(system_id, component_id, &message, 1500, 1000, 1001, 500, temps, 100, 4800, 1200, 800, NO_TIMESTAMP, 0);
             return true;
         }
 
         case MAVLINK_MSG_ID_TEMPERATURES: {
-            mavlink_msg_temperatures_pack(system_id, component_id, &message, 2500, 2600, 3500, 3600, NO_TIMESTAMP, 0);
+            mavlink_msg_temperatures_pack(system_id, component_id, &message, 2500, 2600, 3500, 3600, 3700, 3800, 3900, 4000, 4100, 4200, NO_TIMESTAMP, 0);
             return true;
         }
 

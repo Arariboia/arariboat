@@ -670,27 +670,16 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
             }
             break;
         }
-        case DATA_SOURCE_MPPT_STRINGS: {
-            mppt_strings_data_t string_data = message.payload.mppt_strings;
-            mavlink_msg_mppt_strings_pack(
-                system_id, component_id, mavlink_msg,
-                string_data.string_1,
-                string_data.string_2,
-                string_data.string_3,
-                string_data.string_4,
-                message.timestamp.epoch_seconds,
-                message.timestamp.epoch_ms
-            );
-            break;
-        }
         case DATA_SOURCE_INSTRUMENTATION: {
             instrumentation_data_t inst_data = message.payload.instrumentation;
+            uint16_t panel_strings[4] = {inst_data.panel_strings_mA.string_1, inst_data.panel_strings_mA.string_2, inst_data.panel_strings_mA.string_3, inst_data.panel_strings_mA.string_4};
             mavlink_msg_instrumentation_pack(
                 system_id, component_id, mavlink_msg,
                 inst_data.battery_current_cA,
                 inst_data.motor_current_left_cA,
                 inst_data.motor_current_right_cA,
                 inst_data.mppt_current_cA,
+                panel_strings,
                 inst_data.auxiliary_battery_current_cA,
                 inst_data.battery_voltage_cV,
                 inst_data.auxiliary_battery_voltage_cV,
@@ -708,6 +697,12 @@ bool mavlink_msg_from_message_t(message_t message, mavlink_message_t *mavlink_ms
                 temp_data.battery_right_cdegC,
                 temp_data.mppt_left_cdegC,
                 temp_data.mppt_right_cdegC,
+                temp_data.motor_left_cdegC,
+                temp_data.motor_right_cdegC,
+                temp_data.esc_left_cdegC,
+                temp_data.esc_right_cdegC,
+                temp_data.motor_cover_left_cdegC,
+                temp_data.motor_cover_right_cdegC,
                 message.timestamp.epoch_seconds,
                 message.timestamp.epoch_ms
             );
@@ -753,7 +748,7 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
 
             // Populate the voltage and SOC data.
             bms_data->voltage_data.current_deciamps = bms_mavlink_data.current_battery;
-            bms_data->voltage_data.soc_decipercent = bms_mavlink_data.state_of_charge; 
+            bms_data->voltage_data.soc_decipercent = bms_mavlink_data.state_of_charge;
             
             // Populate cell voltages.
             for (int i = 0; i < 16; i++) {
@@ -890,18 +885,6 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
             message->timestamp.epoch_ms = mppt_state_data.timestamp_milliseconds;
             break;
         }
-        case MAVLINK_MSG_ID_MPPT_STRINGS: {
-            message->source = DATA_SOURCE_MPPT_STRINGS;
-            mavlink_mppt_strings_t mppt_strings_data;
-            mavlink_msg_mppt_strings_decode(mavlink_msg, &mppt_strings_data);
-            message->payload.mppt_strings.string_1 = mppt_strings_data.string_1;            
-            message->payload.mppt_strings.string_2 = mppt_strings_data.string_2;            
-            message->payload.mppt_strings.string_3 = mppt_strings_data.string_3;            
-            message->payload.mppt_strings.string_4 = mppt_strings_data.string_4;
-            message->timestamp.epoch_seconds = mppt_strings_data.timestamp_seconds;
-            message->timestamp.epoch_ms = mppt_strings_data.timestamp_milliseconds;
-            break;            
-        }
         case MAVLINK_MSG_ID_INSTRUMENTATION: {
             message->source = DATA_SOURCE_INSTRUMENTATION;
             mavlink_instrumentation_t inst_data;
@@ -910,6 +893,10 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
             message->payload.instrumentation.motor_current_left_cA = inst_data.motor_current_left;
             message->payload.instrumentation.motor_current_right_cA = inst_data.motor_current_right;
             message->payload.instrumentation.mppt_current_cA = inst_data.mppt_current;
+            message->payload.instrumentation.panel_strings_mA.string_1 = inst_data.panel_strings[0];
+            message->payload.instrumentation.panel_strings_mA.string_2 = inst_data.panel_strings[1];
+            message->payload.instrumentation.panel_strings_mA.string_3 = inst_data.panel_strings[2];
+            message->payload.instrumentation.panel_strings_mA.string_4 = inst_data.panel_strings[3];
             message->payload.instrumentation.auxiliary_battery_current_cA = inst_data.auxiliary_battery_current;
             message->payload.instrumentation.battery_voltage_cV = inst_data.battery_voltage;
             message->payload.instrumentation.auxiliary_battery_voltage_cV = inst_data.auxiliary_battery_voltage;
@@ -926,6 +913,12 @@ bool message_t_from_mavlink_msg(const mavlink_message_t *mavlink_msg, message_t 
             message->payload.temperature.battery_right_cdegC = temp_data.temperature_battery_right;
             message->payload.temperature.mppt_left_cdegC = temp_data.temperature_mppt_left;
             message->payload.temperature.mppt_right_cdegC = temp_data.temperature_mppt_right;
+            message->payload.temperature.motor_left_cdegC = temp_data.temperature_motor_left;
+            message->payload.temperature.motor_right_cdegC = temp_data.temperature_motor_right;
+            message->payload.temperature.esc_left_cdegC = temp_data.temperature_esc_left;
+            message->payload.temperature.esc_right_cdegC = temp_data.temperature_esc_right;
+            message->payload.temperature.motor_cover_left_cdegC = temp_data.temperature_motor_cover_left;
+            message->payload.temperature.motor_cover_right_cdegC = temp_data.temperature_motor_cover_right;
             message->timestamp.epoch_seconds = temp_data.timestamp_seconds;
             message->timestamp.epoch_ms = temp_data.timestamp_milliseconds;
             break;

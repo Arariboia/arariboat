@@ -755,6 +755,10 @@ void instrumentation_task(void* parameter) {
         data.motor_current_left_cA = static_cast<int16_t>(current_motor_left.value() * 100.0f); // Convert to centiAmperes
         data.motor_current_right_cA = static_cast<int16_t>(current_motor_right.value() * 100.0f); // Convert to centiAmperes
         data.mppt_current_cA = static_cast<int16_t>(current_mppt.value() * 100.0f); // Convert to centiAmperes
+        data.panel_strings_mA.string_1 = static_cast<uint16_t>(abs(solar_panel_current_one.value()) * 1000.0f); // Convert to milliAmperes
+        data.panel_strings_mA.string_2 = static_cast<uint16_t>(abs(solar_panel_current_two.value()) * 1000.0f); // Convert to milliAmperes
+        data.panel_strings_mA.string_3 = static_cast<uint16_t>(abs(solar_panel_current_three.value()) * 1000.0f); // Convert to milliAmperes
+        data.panel_strings_mA.string_4 = static_cast<uint16_t>(abs(solar_panel_current_four.value()) * 1000.0f); // Convert to milliAmperes
         data.battery_voltage_cV = static_cast<uint16_t>(main_battery_voltage.value() * 100.0f); // Convert to centiVolts
         data.auxiliary_battery_voltage_cV = static_cast<uint16_t>(auxiliary_battery_voltage.value() * 100.0f); // Convert to centiVolts
         data.auxiliary_battery_current_cA = static_cast<int16_t>(auxiliary_battery_current.value() * 100.0f); // Convert to centiAmperes
@@ -770,24 +774,6 @@ void instrumentation_task(void* parameter) {
             DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
         } 
         #endif 
-
-        message_t msg_strings;
-        msg_strings.source = DATA_SOURCE_MPPT_STRINGS;
-        auto& data_strings = msg.payload.mppt_strings;
-        data_strings.string_1 = static_cast<uint16_t>(abs(solar_panel_current_one.value()) * 1000.0f); // Convert to milliAmperes
-        data_strings.string_2 = static_cast<uint16_t>(abs(solar_panel_current_two.value()) * 1000.0f); // Convert to milliAmperes
-        data_strings.string_3 = static_cast<uint16_t>(abs(solar_panel_current_three.value()) * 1000.0f); // Convert to milliAmperes
-        data_strings.string_4 = static_cast<uint16_t>(abs(solar_panel_current_four.value()) * 1000.0f); // Convert to milliAmperes
-        data_strings.timestamp_ms = time_boot_ms; // Timestamp in milliseconds
-
-        msg_strings.timestamp.epoch_seconds = get_epoch_seconds();
-        msg_strings.timestamp.epoch_ms = get_epoch_millis();
-        msg_strings.timestamp.time_since_boot_ms = time_boot_ms;
-
-        //Send the message to the broker
-        if (xQueueSend(broker_queue, &msg_strings, pdMS_TO_TICKS(20)) != pdTRUE) {
-            DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
-        } 
 
         // Propulsion data message
         #ifdef PROPULSION_BOARD
