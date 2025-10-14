@@ -106,112 +106,64 @@ void WriteMessageToSerial(mavlink_message_t message) {
     Serial.write(buffer, len);
 }
 
+void LineProtocolAddTag(char* buffer, const char* key, const char* value) {
+    sprintf(buffer + strlen(buffer), "%s=%s,", key, value);
+}
+
+void LineProtocolAddField(char* buffer, const char* key, float value) {
+    sprintf(buffer + strlen(buffer), "%s=%.2f,", key, value);
+}
+
+void LineProtocolAddField(char* buffer, const char* key, int value) {
+    sprintf(buffer + strlen(buffer), "%s=%d,", key, value);
+}
+
+void LineProtocolAddTimestamp(char* buffer, uint32_t timestamp, uint16_t timestamp_ms) {
+    unsigned long timestamp = timestamp * 1000 + timestamp_ms;
+    sprintf(buffer + strlen(buffer), " %lu", timestamp);
+}
+
+void MavlinkEzkontrol_I_toLineProtocol(char *buffer, mavlink_ezkontrol_mcu_meter_data_i_t data) {
+    LineProtocolAddTag(buffer, "message", "motorEletricalData");
+    LineProtocolAddTag(buffer, "instance", data.instance == 0 ? "left" : "right");
+    sprintf(buffer + strlen(buffer), " ");
+    LineProtocolAddField(buffer, "busVoltage", data.bus_voltage);
+    LineProtocolAddField(buffer, "busCurrent", data.bus_current);
+    LineProtocolAddField(buffer, "rpm", data.rpm);
+    LineProtocolAddField(buffer, "acceleratorOpening", data.accelerator_opening);
+    LineProtocolAddTimestamp(buffer, data.timestamp_seconds, data.timestamp_milliseconds);
+}
+
+void MavlinkEzkontrol_II_toLineProtocol(char *buffer, mavlink_ezkontrol_mcu_meter_data_ii_t data) {
+    LineProtocolAddTag(buffer, "message", "motorStateData");
+    LineProtocolAddTag(buffer, "instance", data.instance == 0 ? "left" : "right");
+    LineProtocolAddField(buffer, "controllerTemperature", data.controller_temperature);
+    LineProtocolAddField(buffer, "motorTemperature", data.motor_temperature);
+    LineProtocolAddTimestamp(buffer, data.timestamp_seconds, data.timestamp_milliseconds);
+}
+
 
 String MavlinkToLineProtocol(mavlink_message_t message) {
-
-    // char buffer[5112];
-    // memset(buffer, 0, sizeof(buffer));
-    // switch (message.msgid) {
-    //     case MAVLINK_MSG_ID_HEARTBEAT: {
-    //         mavlink_heartbeat_t heartbeat;
-    //         mavlink_msg_heartbeat_decode(&message, &heartbeat);
-    //         sprintf(buffer, "Yonah heartbeat=%d", heartbeat.custom_mode);
-    //         break;
-    //     }
-    //     case MAVLINK_MSG_ID_INSTRUMENTATION: {
-    //         mavlink_instrumentation_t instrumentation;
-    //         mavlink_msg_instrumentation_decode(&message, &instrumentation);
-    //         sprintf(buffer, "Yonah battery_voltage=%.2f,"
-    //                         "motor_current_left=%.2f,"
-    //                         "motor_current_right=%.2f,"
-    //                         "mppt_current=%.2f",
-    //                         instrumentation.battery_voltage,
-    //                         instrumentation.motor_current_left,
-    //                         instrumentation.motor_current_right,
-    //                         instrumentation.mppt_current);
-    //         if (instrumentation.timestamp != NO_TIMESTAMP) {
-    //             sprintf(buffer + strlen(buffer), " %lu", instrumentation.timestamp);
-    //         }
-    //         break;
-    //     }
-    //     case MAVLINK_MSG_ID_TEMPERATURES: {
-    //         mavlink_temperatures_t temperatures;
-    //         mavlink_msg_temperatures_decode(&message, &temperatures);
-    //         sprintf(buffer, "Yonah temp_bat_left=%.2f,"
-    //                         "temp_bat_right=%.2f,"
-    //                         "temp_mppt=%.2f",
-    //                         temperatures.temperature_battery_left,
-    //                         temperatures.temperature_battery_right,
-    //                         temperatures.temperature_mppt);
-    //         if (temperatures.timestamp != NO_TIMESTAMP) {
-    //             sprintf(buffer + strlen(buffer), " %lu", temperatures.timestamp);
-    //         }
-    //         break;
-    //     }
-    //     case MAVLINK_MSG_ID_GPS_INFO: {
-    //         mavlink_gps_info_t gps_info;
-    //         mavlink_msg_gps_info_decode(&message, &gps_info);
-    //         sprintf(buffer, "Yonah latitude=%.2f,"
-    //                         "longitude=%.2f,"
-    //                         "course=%.2f,"
-    //                         "speed=%.2f,"
-    //                         "satellites=%d",
-    //                         gps_info.latitude,
-    //                         gps_info.longitude,
-    //                         gps_info.course,
-    //                         gps_info.speed,
-    //                         gps_info.satellites_visible);
-    //         if (gps_info.timestamp != NO_TIMESTAMP) {
-    //             sprintf(buffer + strlen(buffer), " %lu", gps_info.timestamp);
-    //         }
-    //         break;
-    //     }
-    //     case MAVLINK_MSG_ID_RPM_INFO: {
-    //         mavlink_rpm_info_t rpm_info;
-    //         mavlink_msg_rpm_info_decode(&message, &rpm_info);
-    //         sprintf(buffer, "Yonah rpm_left=%.2f,"
-    //                         "rpm_right=%.2f",
-    //                         rpm_info.rpm_left,
-    //                         rpm_info.rpm_right);
-    //         if (rpm_info.timestamp != NO_TIMESTAMP) {
-    //             sprintf(buffer + strlen(buffer), " %lu", rpm_info.timestamp);
-    //         }
-    //         break;
-    //     }
-    //     case MAVLINK_MSG_ID_ALL_INFO: {
-    //         mavlink_all_info_t all_info;
-    //         mavlink_msg_all_info_decode(&message, &all_info);
-    //         sprintf(buffer, "Yonah battery_voltage=%.2f,"
-    //                         "motor_current_left=%.2f,"
-    //                         "motor_current_right=%.2f,"
-    //                         "mppt_current=%.2f,"
-    //                         "temp_bat_left=%.2f,"
-    //                         "temp_bat_right=%.2f,"
-    //                         "temp_mppt=%.2f,"
-    //                         "latitude=%f,"
-    //                         "longitude=%f,"
-    //                         "rpm_left=%.2f,"
-    //                         "rpm_right=%.2f",
-    //                         all_info.battery_voltage,
-    //                         all_info.motor_current_left,
-    //                         all_info.motor_current_right,
-    //                         all_info.mppt_current,
-    //                         all_info.temperature_battery_left,
-    //                         all_info.temperature_battery_right,
-    //                         all_info.temperature_mppt,
-    //                         all_info.latitude,
-    //                         all_info.longitude,
-    //                         all_info.rpm_left,
-    //                         all_info.rpm_right);
-    //         if (all_info.timestamp != NO_TIMESTAMP) {
-    //             sprintf(buffer + strlen(buffer), " %lu", all_info.timestamp);
-    //         }
-    //         break;
-    //     }
-    //     default: {
-    //         sprintf(buffer, "");
-    //         break;
-    //     }
-    // }
-    // return String(buffer);
+    char buffer[5112];
+    memset(buffer, 0, sizeof(buffer));
+    sprintf(buffer, "Yonah,");
+    switch (message.msgid) {
+        case MAVLINK_MSG_ID_EZKONTROL_MCU_METER_DATA_I: {
+            mavlink_ezkontrol_mcu_meter_data_i_t motor_data;
+            mavlink_msg_ezkontrol_mcu_meter_data_i_decode(&message, &motor_data);
+            MavlinkEzkontrol_I_toLineProtocol(buffer, motor_data);
+            break;
+        }
+        case MAVLINK_MSG_ID_EZKONTROL_MCU_METER_DATA_II: {
+            mavlink_ezkontrol_mcu_meter_data_ii_t motor_data;
+            mavlink_msg_ezkontrol_mcu_meter_data_ii_decode(&message, &motor_data);
+            MavlinkEzkontrol_II_toLineProtocol(buffer, motor_data);
+            break;
+        }
+        default: {
+            sprintf(buffer, "");
+            break;
+        }
+    }
+    return String(buffer);
 }

@@ -44,7 +44,7 @@ void setup() {
     // CREATE_TASK(wifi_task, STACK_SIZE(4096), PRIORITY(1));
     // CREATE_TASK(server_task, STACK_SIZE(4096), PRIORITY(1));
     initialize_flash_memory();
-    // CREATE_TASK(flashcard_reader_task, STACK_SIZE(8192), PRIORITY(1));
+    CREATE_TASK(flashcard_reader_task, STACK_SIZE(8192), PRIORITY(1));
     #ifdef TRANSMITTER
     CREATE_TASK(can_task, STACK_SIZE(8192), PRIORITY(3));
     #endif

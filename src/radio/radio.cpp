@@ -12,6 +12,7 @@
 #include "radio_defs.h"  // Radio definitions and constants
 #include "mavlink_data_conversion.h" // Mavlink data conversion functions
 #include "throttling_config.h"
+#include "storage.hpp"
 
 // A simple struct to pass received packet data from the ISR to the main task.
 typedef struct {
@@ -322,6 +323,9 @@ void radio_task(void* parameter) {
             } else {
                 DEBUG_PRINTF("[RADIO] Failed to begin LoRa packet\n", NULL);
             }
+
+            // Write to SDCard
+            SaveMavlinkMessage(mavlink_msg);
         }
     }
     #else
