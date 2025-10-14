@@ -118,8 +118,8 @@ void LineProtocolAddField(char* buffer, const char* key, int value) {
     sprintf(buffer + strlen(buffer), "%s=%d,", key, value);
 }
 
-void LineProtocolAddTimestamp(char* buffer, uint32_t timestamp, uint16_t timestamp_ms) {
-    unsigned long timestamp = timestamp * 1000 + timestamp_ms;
+void LineProtocolAddTimestamp(char* buffer, uint32_t timestamp_s, uint16_t timestamp_ms) {
+    unsigned long timestamp = timestamp_s * 1000 + timestamp_ms;
     sprintf(buffer + strlen(buffer), " %lu", timestamp);
 }
 
