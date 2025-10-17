@@ -14,8 +14,8 @@ typedef Adafruit_ADS1115 ADS1115; //Shorter alias for the ADS1115 class from Ada
 
 // ADC I2C Addresses
 constexpr uint8_t currents_adc_address = 0x48;
-constexpr uint8_t solar_panel_currents_adc_address = 0x4A;
 constexpr uint8_t voltages_adc_address = 0x49;
+constexpr uint8_t solar_panel_currents_adc_address = 0x4A;
 constexpr uint8_t propulsion_adc_address = 0x4B;
 
 // INA226 I2C Address for Auxiliary Battery
@@ -603,39 +603,43 @@ void instrumentation_task(void* parameter) {
         }
 
 
-        if (is_voltages_adc_initialized && is_voltages_cal_loaded) {
+        if (is_voltages_adc_initialized) {
 
-            int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(0);
-            int16_t raw_adc_pump_left_voltage = voltagesAdc.readADC_SingleEnded(1);
-            int16_t raw_adc_pump_right_voltage = voltagesAdc.readADC_SingleEnded(2);
-            int16_t raw_adc_main_battery_voltage = voltagesAdc.readADC_SingleEnded(3);
+            int16_t raw_adc_main_battery_voltage = voltagesAdc.readADC_SingleEnded(0);
+            
+            voltagesAdc.setGain(GAIN_SIXTEEN); // Set gain to 16x for higher voltage range on channel 1 (irradiance)
+            int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(1);
+            voltagesAdc.setGain(GAIN_ONE); // Set gain back to 1x for channels 2 and 3 (pump voltages)
+
+            int16_t raw_adc_pump_left_voltage = voltagesAdc.readADC_SingleEnded(2);
+            int16_t raw_adc_pump_right_voltage = voltagesAdc.readADC_SingleEnded(3);
 
             // Convert raw ADC readings to calibrated values using the loaded calibration data
-            float irradiance_sample = LinearCorrection(raw_adc_irradiance, voltages_board_cal_data.calibrations[0].slope, voltages_board_cal_data.calibrations[0].intercept);
-            float pump_left_voltage_sample = LinearCorrection(raw_adc_pump_left_voltage, voltages_board_cal_data.calibrations[1].slope, voltages_board_cal_data.calibrations[1].intercept);              
-            float pump_right_voltage_sample = LinearCorrection(raw_adc_pump_right_voltage, voltages_board_cal_data.calibrations[2].slope, voltages_board_cal_data.calibrations[2].intercept);                                                                                              
-            float main_battery_voltage_sample = LinearCorrection(raw_adc_main_battery_voltage, voltages_board_cal_data.calibrations[3].slope, voltages_board_cal_data.calibrations[3].intercept);
+            float main_battery_voltage_sample = LinearCorrection(raw_adc_main_battery_voltage, 0.00236977, 0.05752317);
+            float irradiance_sample = LinearCorrection(raw_adc_irradiance, 0.0696717646, 3.531795009);
+            float pump_left_voltage_sample = LinearCorrection(raw_adc_pump_left_voltage, 0.00066468, -0.00058373f);
+            float pump_right_voltage_sample = LinearCorrection(raw_adc_pump_right_voltage, 0.0006628, -0.0048646f);                                                                                       
                                                                                   
             // Apply low-pass IIR filtering to smooth the irradiance reading
+            main_battery_voltage.filter(main_battery_voltage_sample);
             irradiance.filter(irradiance_sample);
             pump_left_voltage.filter(pump_left_voltage_sample);
             pump_right_voltage.filter(pump_right_voltage_sample);
-            main_battery_voltage.filter(main_battery_voltage_sample);
             
             buffer_current_len += snprintf(
                 instrumentation_debug_buffer + buffer_current_len,
                 sizeof(instrumentation_debug_buffer) - buffer_current_len,
                 "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
-                "  Irradiance: %.0f W/m^2 (RawADC: %d)\n"
+                "  Main Battery Voltage: %.2f V (RawADC: %d)\n"
+                "  Irradiance: %.f W/m^2 (RawADC: %d)\n"
                 "  Pump Left Voltage: %.2f V (RawADC: %d)\n"
-                "  Pump Right Voltage: %.2f V (RawADC: %d)\n"
-                "  Main Battery Voltage: %.2f V (RawADC: %d)\n",
+                "  Pump Right Voltage: %.2f V (RawADC: %d)\n",
                 (buffer_current_len == 0) ? "" : "\n",
                 voltages_adc_address, voltages_board_eeprom_address,
+                main_battery_voltage.value(), raw_adc_main_battery_voltage,
                 irradiance.value(), raw_adc_irradiance,
                 pump_left_voltage.value(), raw_adc_pump_left_voltage,
-                pump_right_voltage.value(), raw_adc_pump_right_voltage,
-                main_battery_voltage.value(), raw_adc_main_battery_voltage
+                pump_right_voltage.value(), raw_adc_pump_right_voltage
             );
 
 
