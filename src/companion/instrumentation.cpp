@@ -445,7 +445,7 @@ void instrumentation_task(void* parameter) {
                 solar_panel_currents_adc.setDataRate(RATE_ADS1115_16SPS);
                 solar_panel_currents_adc.setGain(GAIN_ONE); // GAIN_ONE for LSB consistency
                 is_solar_panel_currents_adc_initialized = true;
-            } else { DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) init failed.\n", solar_panel_currents_adc_address); /* Log failure, non-blocking */ }
+            // } else { DEBUG_PRINTF("\n[ADS]Solar Panel Currents ADC (0x%X) init failed.\n", solar_panel_currents_adc_address); /* Log failure, non-blocking */ }
         }
 
         // if (is_solar_panel_currents_adc_initialized && !is_solar_panel_currents_cal_loaded) {
@@ -488,7 +488,7 @@ void instrumentation_task(void* parameter) {
                 aux_battery_monitor.setMaxCurrentShunt(13.0f, 0.005f, true); 
                 is_aux_battery_monitor_initialized = true;
             } else {
-                DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
+                // DEBUG_PRINTF("\n[INA226] Aux Battery Monitor (0x%X) init failed.\n", aux_battery_ina226_address);
                 /* Log failure, non-blocking, will retry next loop */
             }
         }
@@ -578,21 +578,21 @@ void instrumentation_task(void* parameter) {
             solar_panel_current_three.filter(solar_panel_current_three_sample);
             solar_panel_current_four.filter(solar_panel_current_four_sample);
 
-            buffer_current_len += snprintf(
-                instrumentation_debug_buffer + buffer_current_len,
-                sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                "%s[Solar Panel Currents ADC 0x%X | EEPROM 0x%X]\n"
-                "  String 1 Current: %.2f A (RawADC: %d)\n"
-                "  String 2 Current: %.2f A (RawADC: %d)\n"
-                "  String 3 Current: %.2f A (RawADC: %d)\n"
-                "  String 4 Current: %.2f A (RawADC: %d)\n",
-                (buffer_current_len == 0) ? "" : "\n",
-                solar_panel_currents_adc_address, solar_panel_currents_board_eeprom_address,
-                solar_panel_current_one.value(), raw_adc_solar_panel_current_one,
-                solar_panel_current_two.value(), raw_adc_solar_panel_current_two,
-                solar_panel_current_three.value(), raw_adc_solar_panel_current_three,
-                solar_panel_current_four.value(), raw_adc_solar_panel_current_four
-            );
+            // buffer_current_len += snprintf(
+            //     instrumentation_debug_buffer + buffer_current_len,
+            //     sizeof(instrumentation_debug_buffer) - buffer_current_len,
+            //     "%s[Solar Panel Currents ADC 0x%X | EEPROM 0x%X]\n"
+            //     "  String 1 Current: %.2f A (RawADC: %d)\n"
+            //     "  String 2 Current: %.2f A (RawADC: %d)\n"
+            //     "  String 3 Current: %.2f A (RawADC: %d)\n"
+            //     "  String 4 Current: %.2f A (RawADC: %d)\n",
+            //     (buffer_current_len == 0) ? "" : "\n",
+            //     solar_panel_currents_adc_address, solar_panel_currents_board_eeprom_address,
+            //     solar_panel_current_one.value(), raw_adc_solar_panel_current_one,
+            //     solar_panel_current_two.value(), raw_adc_solar_panel_current_two,
+            //     solar_panel_current_three.value(), raw_adc_solar_panel_current_three,
+            //     solar_panel_current_four.value(), raw_adc_solar_panel_current_four
+            // );
 
         } else {
             // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
@@ -607,6 +607,7 @@ void instrumentation_task(void* parameter) {
 
             int16_t raw_adc_main_battery_voltage = voltagesAdc.readADC_SingleEnded(0);
             
+            Serial.println("LENDO IRRADIANCIA");
             voltagesAdc.setGain(GAIN_SIXTEEN); // Set gain to 16x for higher voltage range on channel 1 (irradiance)
             int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(1);
             voltagesAdc.setGain(GAIN_ONE); // Set gain back to 1x for channels 2 and 3 (pump voltages)
@@ -661,13 +662,13 @@ void instrumentation_task(void* parameter) {
             float filtered_aux_battery_voltage = auxiliary_battery_voltage.filter(aux_bus_voltage);
             float filtered_aux_battery_current = auxiliary_battery_current.filter(aux_current);
 
-            buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
-                                           sizeof(instrumentation_debug_buffer) - buffer_current_len,
-                                           "%s[Aux Battery INA226 0x%X]\n"
-                                           "  Aux V: %.2fV, Aux I: %.3fA, Aux P: %.2fW\n",
-                                           (buffer_current_len == 0) ? "" : "\n",
-                                           aux_battery_ina226_address,
-                                           filtered_aux_battery_voltage, filtered_aux_battery_current, aux_power);
+            // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
+            //                                sizeof(instrumentation_debug_buffer) - buffer_current_len,
+            //                                "%s[Aux Battery INA226 0x%X]\n"
+            //                                "  Aux V: %.2fV, Aux I: %.3fA, Aux P: %.2fW\n",
+            //                                (buffer_current_len == 0) ? "" : "\n",
+            //                                aux_battery_ina226_address,
+            //                                filtered_aux_battery_voltage, filtered_aux_battery_current, aux_power);
         } else {
             // buffer_current_len += snprintf(instrumentation_debug_buffer + buffer_current_len,
             //                                sizeof(instrumentation_debug_buffer) - buffer_current_len,
