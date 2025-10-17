@@ -40,16 +40,16 @@ void setup() {
     initialize_queues(); // Initialize the queues used for inter-task communication.
     system_event_group = xEventGroupCreate(); // Create an event group for system-wide events.
     CREATE_TASK(broker_task, STACK_SIZE(16384), PRIORITY(2));
-    CREATE_TASK(serial_reader_task, STACK_SIZE(8192), PRIORITY(1));
+    // CREATE_TASK(serial_reader_task, STACK_SIZE(8192), PRIORITY(1));
     // CREATE_TASK(wifi_task, STACK_SIZE(4096), PRIORITY(1));
     // CREATE_TASK(server_task, STACK_SIZE(4096), PRIORITY(1));
-    initialize_flash_memory();
-    CREATE_TASK(flashcard_reader_task, STACK_SIZE(8192), PRIORITY(1));
+    // initialize_flash_memory();
     #ifdef TRANSMITTER
     CREATE_TASK(can_task, STACK_SIZE(8192), PRIORITY(3));
     #endif
+    // CREATE_TASK(flashcard_reader_task, STACK_SIZE(8192), PRIORITY(1));
     CREATE_TASK(radio_task, STACK_SIZE(8192), PRIORITY(3));
-    // CREATE_TASK(led_manager_task, STACK_SIZE(4096), PRIORITY(1));
+    CREATE_TASK(led_manager_task, STACK_SIZE(4096), PRIORITY(1));
     CREATE_TASK(display_screen_task, STACK_SIZE(4096), PRIORITY(1));
 }
 

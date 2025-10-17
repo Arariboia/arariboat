@@ -156,6 +156,7 @@ static bool markInitialized(Preferences& flashMemory) {
 
 void initialize_flash_memory() {
     
+    Serial.println("INICIANDO SD");
     if (checkIfInitialized(flashMemory)) return;
 
     vTaskDelay(pdMS_TO_TICKS(3000));

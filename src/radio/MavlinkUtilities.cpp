@@ -139,3 +139,113 @@ void WriteMessageToSerial(mavlink_message_t message) {
     uint16_t len = mavlink_msg_to_send_buffer(buffer, &message);
     Serial.write(buffer, len);
 }
+
+void LineProtocolAddTag(char* buffer, const char* key, const char* value) {
+    sprintf(buffer + strlen(buffer), "%s=%s,", key, value);
+}
+
+void LineProtocolAddField(char* buffer, const char* key, float value) {
+    sprintf(buffer + strlen(buffer), "%s=%.2f,", key, value);
+}
+
+void LineProtocolAddField(char* buffer, const char* key, int value) {
+    sprintf(buffer + strlen(buffer), "%s=%d,", key, value);
+}
+
+void LineProtocolAddTimestamp(char* buffer, uint32_t timestamp_s, uint16_t timestamp_ms) {
+    unsigned long timestamp = timestamp_s * 1000 + timestamp_ms;
+    sprintf(buffer + strlen(buffer), " %lu", timestamp);
+}
+
+void MavlinkEzkontrol_I_toLineProtocol(char *buffer, mavlink_ezkontrol_mcu_meter_data_i_t data) {
+    LineProtocolAddTag(buffer, "message", "motorEletricalData");
+    LineProtocolAddTag(buffer, "instance", data.instance == 0 ? "left" : "right");
+    sprintf(buffer + strlen(buffer), " ");
+    LineProtocolAddField(buffer, "busVoltage", data.bus_voltage);
+    LineProtocolAddField(buffer, "busCurrent", data.bus_current);
+    LineProtocolAddField(buffer, "rpm", data.rpm);
+    LineProtocolAddField(buffer, "acceleratorOpening", data.accelerator_opening);
+    LineProtocolAddTimestamp(buffer, data.timestamp_seconds, data.timestamp_milliseconds);
+}
+
+void MavlinkEzkontrol_II_toLineProtocol(char *buffer, mavlink_ezkontrol_mcu_meter_data_ii_t data) {
+    LineProtocolAddTag(buffer, "message", "motorStateData");
+    LineProtocolAddTag(buffer, "instance", data.instance == 0 ? "left" : "right");
+    sprintf(buffer + strlen(buffer), " ");
+    LineProtocolAddField(buffer, "controllerTemperature", data.controller_temperature);
+    LineProtocolAddField(buffer, "motorTemperature", data.motor_temperature);
+    LineProtocolAddTimestamp(buffer, data.timestamp_seconds, data.timestamp_milliseconds);
+}
+
+void MavlinkBMSToLineProtocol(char *buffer, mavlink_bms_t data){
+    LineProtocolAddTag(buffer, "message", "bms");
+    sprintf(buffer + strlen(buffer), " ");
+    LineProtocolAddField(buffer, "batteryCurrent", data.current_battery);
+    LineProtocolAddField(buffer, "stateOfCharge", data.state_of_charge);
+    LineProtocolAddField(buffer, "temperature1", data.temperatures[0]);
+    LineProtocolAddField(buffer, "temperature2", data.temperatures[1]);
+    LineProtocolAddField(buffer, "voltageCell1", data.voltages[0]);
+    LineProtocolAddField(buffer, "voltageCell2", data.voltages[1]);
+    LineProtocolAddField(buffer, "voltageCell3", data.voltages[2]);
+    LineProtocolAddField(buffer, "voltageCell4", data.voltages[3]);
+    LineProtocolAddField(buffer, "voltageCell5", data.voltages[4]);
+    LineProtocolAddField(buffer, "voltageCell6", data.voltages[5]);
+    LineProtocolAddField(buffer, "voltageCell7", data.voltages[6]);
+    LineProtocolAddField(buffer, "voltageCell8", data.voltages[7]);
+    LineProtocolAddField(buffer, "voltageCell9", data.voltages[8]);
+    LineProtocolAddField(buffer, "voltageCell10", data.voltages[9]);
+    LineProtocolAddField(buffer, "voltageCell11", data.voltages[10]);
+    LineProtocolAddField(buffer, "voltageCell12", data.voltages[11]);
+    LineProtocolAddField(buffer, "voltageCell13", data.voltages[12]);
+    LineProtocolAddField(buffer, "voltageCell14", data.voltages[13]);
+    LineProtocolAddField(buffer, "voltageCell15", data.voltages[14]);
+    LineProtocolAddField(buffer, "voltageCell16", data.voltages[15]);
+    LineProtocolAddTimestamp(buffer, data.timestamp_seconds, data.timestamp_milliseconds);
+}
+
+void MavlinkMPPTToLineProtocol(char *buffer, mavlink_mppt_t data){
+    LineProtocolAddTag(buffer, "message", "mppt");
+    sprintf(buffer + strlen(buffer), " ");
+    LineProtocolAddField(buffer, "panelVoltage", data.pv_voltage);
+    LineProtocolAddField(buffer, "panelCurrent", data.pv_current);
+    LineProtocolAddField(buffer, "batteryVoltage", data.battery_voltage);
+    LineProtocolAddField(buffer, "batteryCurrent", data.battery_current);
+    LineProtocolAddTimestamp(buffer, data.timestamp_seconds, data.timestamp_milliseconds);
+}
+
+String MavlinkToLineProtocol(mavlink_message_t message) {
+    char buffer[5112];
+    memset(buffer, 0, sizeof(buffer));
+    sprintf(buffer, "Yonah,");
+    switch (message.msgid) {
+        case MAVLINK_MSG_ID_EZKONTROL_MCU_METER_DATA_I: {
+            mavlink_ezkontrol_mcu_meter_data_i_t motor_data;
+            mavlink_msg_ezkontrol_mcu_meter_data_i_decode(&message, &motor_data);
+            MavlinkEzkontrol_I_toLineProtocol(buffer, motor_data);
+            break;
+        }
+        case MAVLINK_MSG_ID_EZKONTROL_MCU_METER_DATA_II: {
+            mavlink_ezkontrol_mcu_meter_data_ii_t motor_data;
+            mavlink_msg_ezkontrol_mcu_meter_data_ii_decode(&message, &motor_data);
+            MavlinkEzkontrol_II_toLineProtocol(buffer, motor_data);
+            break;
+        }
+        case MAVLINK_MSG_ID_BMS: {
+            mavlink_bms_t bms_data;
+            mavlink_msg_bms_decode(&message, &bms_data);
+            MavlinkBMSToLineProtocol(buffer, bms_data);
+            break;
+        }
+        case MAVLINK_MSG_ID_MPPT: {
+            mavlink_mppt_t mppt_data;
+            mavlink_msg_mppt_decode(&message, &mppt_data);
+            MavlinkMPPTToLineProtocol(buffer, mppt_data);
+            break;
+        }
+        default: {
+            sprintf(buffer, "");
+            break;
+        }
+    }
+    return String(buffer);
+}

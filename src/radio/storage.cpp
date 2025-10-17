@@ -206,6 +206,7 @@ static void serialCommandCallback(void* handler_args, esp_event_base_t base, int
 /// @param parameter 
 void flashcard_reader_task(void *parameter) {
 
+    vTaskDelay(pdMS_TO_TICKS(5000));
     //Create a mutex for the file system
     while ((fileMutex = xSemaphoreCreateMutex()) == NULL) {
         Serial.println("Failed to create file mutex");
