@@ -606,37 +606,35 @@ void instrumentation_task(void* parameter) {
         if (is_voltages_adc_initialized) {
 
             int16_t raw_adc_main_battery_voltage = voltagesAdc.readADC_SingleEnded(0);
-            
-            voltagesAdc.setGain(GAIN_SIXTEEN); // Set gain to 16x for higher voltage range on channel 1 (irradiance)
-            int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(1);
-            voltagesAdc.setGain(GAIN_ONE); // Set gain back to 1x for channels 2 and 3 (pump voltages)
-
-            int16_t raw_adc_pump_left_voltage = voltagesAdc.readADC_SingleEnded(2);
-            int16_t raw_adc_pump_right_voltage = voltagesAdc.readADC_SingleEnded(3);
+            int16_t raw_adc_pump_left_voltage = voltagesAdc.readADC_SingleEnded(1);
+            int16_t raw_adc_pump_right_voltage = voltagesAdc.readADC_SingleEnded(2);
+            int16_t raw_adc_irradiance = voltagesAdc.readADC_SingleEnded(3);
 
             // Convert raw ADC readings to calibrated values using the loaded calibration data
-            float main_battery_voltage_sample = LinearCorrection(raw_adc_main_battery_voltage, 0.00236977, 0.05752317);
-            float irradiance_sample = LinearCorrection(raw_adc_irradiance, 0.0696717646, 3.531795009);
-            float pump_left_voltage_sample = LinearCorrection(raw_adc_pump_left_voltage, 0.00066468, -0.00058373f);
-            float pump_right_voltage_sample = LinearCorrection(raw_adc_pump_right_voltage, 0.0006628, -0.0048646f);                                                                                       
+            float main_battery_voltage_sample = LinearCorrection(raw_adc_main_battery_voltage, 0.0023742, 0.0508398);
+            float pump_left_voltage_sample = LinearCorrection(raw_adc_pump_left_voltage, 0.0023683, 0.0487897);
+            float pump_right_voltage_sample = LinearCorrection(raw_adc_pump_right_voltage, 0.0023707, 0.0668564);                                                                                       
+            float irradiance_sample = LinearCorrection(raw_adc_irradiance, 0.1220760, -1606.2580492);
                                                                                   
             // Apply low-pass IIR filtering to smooth the irradiance reading
             main_battery_voltage.filter(main_battery_voltage_sample);
-            irradiance.filter(irradiance_sample);
             pump_left_voltage.filter(pump_left_voltage_sample);
             pump_right_voltage.filter(pump_right_voltage_sample);
+            irradiance.filter(irradiance_sample);
             
             buffer_current_len += snprintf(
                 instrumentation_debug_buffer + buffer_current_len,
                 sizeof(instrumentation_debug_buffer) - buffer_current_len,
                 "%s[Voltages ADC 0x%X | EEPROM 0x%X]\n"
                 "  Main Battery Voltage: %.2f V (RawADC: %d)\n"
-                "  Irradiance: %.f W/m^2 (RawADC: %d)\n"
                 "  Pump Left Voltage: %.2f V (RawADC: %d)\n"
-                "  Pump Right Voltage: %.2f V (RawADC: %d)\n",
+                "  Pump Right Voltage: %.2f V (RawADC: %d)\n"
+                "  Irradiance: %.f W/m^2 (RawADC: %d)\n",
                 (buffer_current_len == 0) ? "" : "\n",
                 voltages_adc_address, voltages_board_eeprom_address,
                 main_battery_voltage.value(), raw_adc_main_battery_voltage,
+                pump_left_voltage.value(), raw_adc_pump_left_voltage,
+                pump_right_voltage.value(), raw_adc_pump_right_voltage,
                 irradiance.value(), raw_adc_irradiance,
                 pump_left_voltage.value(), raw_adc_pump_left_voltage,
                 pump_right_voltage.value(), raw_adc_pump_right_voltage
