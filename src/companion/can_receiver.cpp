@@ -200,16 +200,16 @@ void queue_listener_task(void* parameter) {
     while (true) {
         MotorCANManager::motor_data_t motor_data;
         if (xQueueReceive(motor_queue, &motor_data, pdMS_TO_TICKS(100)) == pdTRUE) {
-            Serial.printf("\n[LISTEN]Motor Data: Bus Voltage=%.1fV, Bus Current=%.1fA, Phase Current=%.1fA, RPM=%d\n",
-                motor_data.electrical_data.bus_voltage_dV / 10.f, motor_data.electrical_data.bus_current_dA / 10.f, motor_data.electrical_data.phase_current_dA / 10.f, motor_data.electrical_data.rpm);
+            // Serial.printf("\n[LISTEN]Motor Data: Bus Voltage=%.1fV, Bus Current=%.1fA, Phase Current=%.1fA, RPM=%d\n",
+            //     motor_data.electrical_data.bus_voltage_dV / 10.f, motor_data.electrical_data.bus_current_dA / 10.f, motor_data.electrical_data.phase_current_dA / 10.f, motor_data.electrical_data.rpm);
         }
 
         bms_data_t bms_data;
         if (xQueueReceive(bms_queue, &bms_data, pdMS_TO_TICKS(100)) == pdTRUE) {
-            Serial.printf("\n[LISTEN]BMS Data: Voltage=%.1fV, Current=%.1fA, SOC=%.1f%%\n",
-                bms_data.voltage_data.cumulative_voltage_decivolts / 10.f,
-                bms_data.voltage_data.current_deciamps / 10.f,
-                bms_data.voltage_data.soc_decipercent / 10.f);
+            // Serial.printf("\n[LISTEN]BMS Data: Voltage=%.1fV, Current=%.1fA, SOC=%.1f%%\n",
+            //     bms_data.voltage_data.cumulative_voltage_decivolts / 10.f,
+            //     bms_data.voltage_data.current_deciamps / 10.f,
+            //     bms_data.voltage_data.soc_decipercent / 10.f);
         }
     }
     vTaskDelete(NULL); // Delete the task to free up resources

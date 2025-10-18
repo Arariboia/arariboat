@@ -418,14 +418,14 @@ void instrumentation_task(void* parameter) {
 
         #ifndef PROPULSION_BOARD
         // --- CURRENTS ADC & CALIBRATION ---
-        // if (!is_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
-        //     if (currentsAdc.begin(currents_adc_address)) {
-        //         DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) successfully initialized.\n", currents_adc_address);
-        //         currentsAdc.setDataRate(RATE_ADS1115_16SPS);
-        //         currentsAdc.setGain(GAIN_ONE); 
-        //         is_currents_adc_initialized = true;
-        //     } else { DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) init failed.\n", currents_adc_address); /* Log failure, non-blocking */ }
-        // }
+        if (!is_currents_adc_initialized && (millis() - last_init_check_time > init_check_interval)) {
+            if (currentsAdc.begin(currents_adc_address)) {
+                DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) successfully initialized.\n", currents_adc_address);
+                currentsAdc.setDataRate(RATE_ADS1115_16SPS);
+                currentsAdc.setGain(GAIN_ONE); 
+                is_currents_adc_initialized = true;
+            } else { DEBUG_PRINTF("\n[ADS]Currents ADC (0x%X) init failed.\n", currents_adc_address); /* Log failure, non-blocking */ }
+        }
 
         // if (is_currents_adc_initialized && !is_currents_cal_loaded) {
         //     DEBUG_PRINTF("[Calibration] Loading for Currents Board (EEPROM 0x%X).\n", currents_board_eeprom_address);
@@ -511,17 +511,17 @@ void instrumentation_task(void* parameter) {
 
         #ifndef PROPULSION_BOARD
         // --- Perform measurements and build output string ---
-        if (is_currents_adc_initialized && is_currents_cal_loaded) {
+        if (is_currents_adc_initialized) {
 
             int16_t raw_adc_battery_current = currentsAdc.readADC_SingleEnded(0);
             int16_t raw_adc_motor_left_current = currentsAdc.readADC_SingleEnded(1);
             int16_t raw_adc_motor_right_current = currentsAdc.readADC_SingleEnded(2);
             int16_t raw_adc_mppt_current = currentsAdc.readADC_SingleEnded(3);
 
-            float battery_current_sample     = LinearCorrection(raw_adc_battery_current, currents_board_cal_data.calibrations[0].slope, currents_board_cal_data.calibrations[0].intercept);
-            float current_motor_left_sample  = LinearCorrection(raw_adc_motor_left_current, currents_board_cal_data.calibrations[1].slope, currents_board_cal_data.calibrations[1].intercept);
-            float current_motor_right_sample = LinearCorrection(raw_adc_motor_right_current, currents_board_cal_data.calibrations[2].slope, currents_board_cal_data.calibrations[2].intercept);
-            float current_mppt_sample        = LinearCorrection(raw_adc_mppt_current, currents_board_cal_data.calibrations[3].slope, currents_board_cal_data.calibrations[3].intercept);
+            float battery_current_sample     = LinearCorrection(raw_adc_battery_current,0.00977516f, -55.7628805f);
+            float current_motor_left_sample  = LinearCorrection(raw_adc_motor_left_current,0.00404174f,0.29024268f);
+            float current_motor_right_sample = LinearCorrection(raw_adc_motor_right_current,0.00405569f, -0.2279276f);
+            float current_mppt_sample        = LinearCorrection(raw_adc_mppt_current,0.00153102f, 0.17747330f);
 
             // Apply low-pass IIR filtering to smooth the readings
             battery_current.filter(battery_current_sample);
@@ -771,7 +771,7 @@ void instrumentation_task(void* parameter) {
         msg.timestamp.epoch_ms = get_epoch_millis();
         msg.timestamp.time_since_boot_ms = time_boot_ms;
 
-        //Send the message to the broker
+        // Send the message to the broker
         if (xQueueSend(broker_queue, &msg, pdMS_TO_TICKS(20)) != pdTRUE) {
             DEBUG_PRINTF("[INSTRUMENTATION]Error: queue is full\n");
         } 

@@ -101,7 +101,7 @@ void led_manager_task(void* parameter) {
             if (new_command.priority >= current_command.priority) {
                 current_command = new_command;
                 pattern_start_time_ms = millis(); // Reset the duration timer for the new pattern.
-                DEBUG_PRINTF("[LedManager] New pattern started: %d, Priority: %d\n", current_command.pattern, current_command.priority);
+                // DEBUG_PRINTF("[LedManager] New pattern started: %d, Priority: %d\n", current_command.pattern, current_command.priority);
             }
         }
 
@@ -115,7 +115,7 @@ void led_manager_task(void* parameter) {
             if (queue_size == 0 && current_command.pattern != LED_PATTERN_IDLE) {
                 // If the queue is empty and we're not in IDLE, revert to IDLE.
                 current_command = {.pattern = LED_PATTERN_IDLE, .priority = 0, .duration_ms = 0};
-                DEBUG_PRINTF("[LedManager] Queue empty, reverting to IDLE state.\n");
+                // DEBUG_PRINTF("[LedManager] Queue empty, reverting to IDLE state.\n");
         }
         }
 
