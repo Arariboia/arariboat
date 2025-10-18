@@ -7,9 +7,6 @@
 // Alias for the ADS1115 class
 using ADS1115 = Adafruit_ADS1115;
 
-// I2C address
-constexpr uint8_t board_address = 0x49;
-
 // GPIO pins for I2C
 constexpr gpio_num_t I2C_SCL_PIN = PIN_SCL;
 constexpr gpio_num_t I2C_SDA_PIN = PIN_SDA;
@@ -61,14 +58,25 @@ void InstrumentationTask(void *parameter) {
     // Initialize the I2C bus
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
-    // Initialize the ADC
-    if (!adc.begin(board_address)) {
-        Serial.printf("[ERROR] Failed to initialize ADC at address 0x%X. Please check the connection.\n", board_address);
-        // Halt execution if the sensor can't be found
-        while (true) {
+    // --- Scan for ADC on I2C bus ---
+    uint8_t found_address = 0;
+    Serial.println("Scanning for ADS1115 on addresses 0x48 to 0x4B... Will retry until found.");
+    
+    while (found_address == 0) {
+        for (uint8_t addr = 0x48; addr <= 0x4B; addr++) {
+            if (adc.begin(addr)) {
+                found_address = addr;
+                Serial.printf("ADC found at address 0x%X\n", found_address);
+                break; // Exit the inner for loop
+            }
+        }
+        
+        if (found_address == 0) {
+            // Wait a bit before retrying the scan
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
+
 
     // Configure the ADC data rate. Gain is now set per-channel inside the loop.
     adc.setDataRate(RATE_ADS1115_860SPS);
