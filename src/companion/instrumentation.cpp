@@ -519,8 +519,8 @@ void instrumentation_task(void* parameter) {
             int16_t raw_adc_mppt_current = currentsAdc.readADC_SingleEnded(3);
 
             float battery_current_sample     = LinearCorrection(raw_adc_battery_current,0.00977516f, -55.7628805f);
-            float current_motor_left_sample  = LinearCorrection(raw_adc_motor_left_current,0.00404174f,0.29024268f);
-            float current_motor_right_sample = LinearCorrection(raw_adc_motor_right_current,0.00405569f, -0.2279276f);
+            float current_motor_left_sample  = LinearCorrection(raw_adc_motor_left_current,0.00377671f,-0.01139791f);
+            float current_motor_right_sample = LinearCorrection(raw_adc_motor_right_current,0.0038256074f, -0.1172312678f);
             float current_mppt_sample        = LinearCorrection(raw_adc_mppt_current,0.00153102f, 0.17747330f);
 
             // Apply low-pass IIR filtering to smooth the readings
